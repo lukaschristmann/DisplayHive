@@ -18,18 +18,18 @@ display or a hundred at once.
 - **Import/export** — back up or migrate a full instance (database + media) as a single archive.
 - **JWT auth** — admin accounts with rate-limited login, no third-party auth dependency.
 
-## A few clarifiing words to the current state
+## A few clarifying words on the current state
 
-DisplaHive is currently in its early stages of development. Even if it is already quiet powerfull there may be some issues. If you encounter them or want to help just contact us on Mastodon (displayhive @ chaos.social). 
-Some of our Main issues are
-- Next to none documentation
-- No rightsmanagement
-- Some Features are not as featurerich or selfexplainatory as they should be
+DisplayHive is currently in its early stages of development. Even if it is already quite powerful, there may be some issues. If you encounter them or want to help, just contact us on Mastodon (displayhive@chaos.social).
+Some of our main issues are:
+- Next to no documentation
+- No rights management
+- Some features are not as feature-rich or self-explanatory as they should be
 
 
 ## AI Usage
 
-At the beginning of the development DisplayHive started without any AI usage. With the evolvement of the code more and more AI code was introduced to the Codebase. But there are no blind commits and the code should be similar to that of an Human Programmer. In the cases things where AI generated there may be things that slipped trough on review. If you found something. Get in Touch. If you intend to use AI help for codeing on Displayhive, this is fine. But ensure small, Topic focused and checkable commits / Pull requests. 
+At the beginning of development, DisplayHive started without any AI usage. As the code evolved, more and more AI-generated code was introduced to the codebase. But there are no blind commits, and the code should be similar to that of a human programmer. In cases where things were AI-generated, there may be things that slipped through review. If you find something, get in touch. If you intend to use AI help for coding on DisplayHive, this is fine, but ensure small, topic-focused, and checkable commits/pull requests.
 
 
 ## Architecture
