@@ -1,5 +1,107 @@
 # DisplayHive
-Curently only the Placeholder for for the later to release DisplayHive. Those with early Access can already commit Issues.
 
-Licence will be set with the initial Software release.
+Self-hosted digital signage for managing screens, content, and schedules in real time.
 
+DisplayHive drives networks of displays (kiosks, TVs, info screens) from a single admin
+panel. Content is composed from HTML/CSS templates with named containers, pushed to
+screens instantly over Socket.IO, and organized into groups so you can target one
+display or a hundred at once.
+
+## Features
+
+- **Live content push** — changes in the admin panel appear on screens immediately via Socket.IO, no polling or refresh required.
+- **Templates & containers** — build layouts once, drop typed content elements into named containers, reuse across screens.
+- **Magic tags** — `{{variable}}` placeholders for dynamic values inside templates.
+- **Screens & groups** — register devices, assign them to screens, organize screens into groups, and manage assignments from a matrix view.
+- **Pretalx integration** — pull conference schedules from a Pretalx instance and render them as content.
+- **Alerting** — Telegram notifications when screens/devices go online, offline, or hit an error state.
+- **Import/export** — back up or migrate a full instance (database + media) as a single archive.
+- **JWT auth** — admin accounts with rate-limited login, no third-party auth dependency.
+
+## A few clarifiing words to the current state
+
+DisplaHive is currently in its early stages of development. Even if it is already quiet powerfull there may be some issues. If you encounter them or want to help just contact us on Mastodon (displayhive @ chaos.social). 
+Some of our Main issues are
+- Next to none documentation
+- No rightsmanagement
+- Some Features are not as featurerich or selfexplainatory as they should be
+
+
+## AI Usage
+
+At the beginning of the development DisplayHive started without any AI usage. With the evolvement of the code more and more AI code was introduced to the Codebase. But there are no blind commits and the code should be similar to that of an Human Programmer. In the cases things where AI generated there may be things that slipped trough on review. If you found something. Get in Touch. If you intend to use AI help for codeing on Displayhive, this is fine. But ensure small, Topic focused and checkable commits / Pull requests. 
+
+
+## Architecture
+
+| Component | Stack | Purpose |
+|---|---|---|
+| **Backend** | Flask + Flask-SocketIO (eventlet), SQLAlchemy, Alembic | REST/API + realtime hub, serves both frontends |
+| **Admin panel** | Vue 3, PrimeVue, Pinia, Vite | Manage content, screens, devices, templates, settings |
+| **Screen client** | TypeScript (no framework), Vite | Kiosk-facing display client, renders pushed content |
+
+SQLite is used for local development; set `DATABASE_URL` to point at PostgreSQL in
+production. Schema changes are managed with Alembic migrations.
+
+## Getting started
+
+### Requirements
+
+- [Nix](https://nixos.org/download) (recommended — provisions Python, Node, and all
+  system dependencies for you), or manually: Python 3.13, Node.js, SQLite
+
+### Setup
+
+```bash
+nix develop   # or: nix-shell
+```
+
+Entering the shell installs JS dependencies (root + both frontends) and runs
+`alembic upgrade head` automatically. With [direnv](https://direnv.net/) hooked into
+your shell, this happens automatically on `cd` into the repo (`direnv allow`).
+
+### Run
+
+```bash
+npm run dev
+```
+
+Starts the backend and both frontends together:
+
+| Service | Command | URL |
+|---|---|---|
+| Backend (Flask + Socket.IO) | `npm run dev:backend` | http://localhost:5000 |
+| Admin panel | `npm run dev:admin` | http://localhost:5173 |
+| Screen client | `npm run dev:screen` | http://localhost:5174 |
+
+### Tests
+
+```bash
+npm run test:e2e         # Playwright, headless
+npm run test:e2e:headed  # Playwright, headed
+npm run test:e2e:ui      # Playwright interactive UI
+```
+
+## Configuration
+
+Copy `.env.example` to `.env` (or export the variables in your shell) to configure:
+
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string (omit for local SQLite) |
+| `SECRET_KEY` | Flask session/JWT signing key — set a real value before deploying |
+| `CORS_ALLOWED_ORIGINS` | Comma-separated list of origins allowed to connect over Socket.IO/API |
+| `TRUSTED_PROXY_COUNT` | Number of reverse proxies in front of the app, for correct client IPs behind nginx |
+| `FLASK_DEBUG` | Enables the Werkzeug debugger — local development only, never on a network-reachable host |
+| `LOG_LEVEL` | Python logging level (default `INFO`) |
+
+## Deployment
+
+A NixOS module ([`nix/module.nix`](nix/module.nix)) is included for running one or more
+DisplayHive instances as systemd services, each with its own PostgreSQL database and
+(optionally) a webhook-triggered auto-deploy on git push. See
+[`nix/example.nix`](nix/example.nix) for a full example configuration.
+
+## License
+
+[MIT](LICENSE)

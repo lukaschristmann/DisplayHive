@@ -1,0 +1,67 @@
+@import './base.css';
+
+#app {
+  /* Allow the admin shell to use full viewport width so PrimeVue components
+     can stretch naturally. Individual pages/components control internal
+     padding. */
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  font-weight: normal;
+}
+
+a,
+.green {
+  text-decoration: none;
+  color: hsla(160, 100%, 37%, 1);
+  transition: 0.4s;
+  padding: 3px;
+}
+
+@media (hover: hover) {
+  a:hover {
+    background-color: hsla(160, 100%, 37%, 0.2);
+  }
+}
+
+/* Remove the two-column layout so pages use the full width responsively.
+   If a two-column admin layout is desired later, reintroduce a dedicated
+   page-level grid instead of constraining the entire #app root. */
+
+/* Global mobile responsive fixes */
+@media (max-width: 768px) {
+  /* Prevent horizontal overflow */
+  body {
+    overflow-x: hidden;
+  }
+
+  /* Make all tables scrollable horizontally */
+  .p-datatable-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Ensure inputs are at least 16px to prevent iOS zoom */
+  input,
+  textarea,
+  select,
+  .p-inputtext,
+  .p-dropdown {
+    font-size: 16px !important;
+  }
+
+  /* Better spacing for mobile */
+  .p-card {
+    margin-bottom: 1rem;
+  }
+
+  /* Stack button groups vertically */
+  .p-buttonset {
+    flex-direction: column;
+  }
+
+  .p-buttonset .p-button {
+    width: 100%;
+  }
+}

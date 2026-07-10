@@ -1,0 +1,110 @@
+import logging
+
+from flask import request
+
+logger = logging.getLogger(__name__)
+
+
+def register_admin_settings_handlers(socketio, app, db):
+    """Register socket handlers for the admin Settings page."""
+    from application.socketio_handlers.auth import admin_handler
+
+    # Keys the generic settings endpoint is allowed to write. Anything else
+    # (e.g. telegram_token) has its own dedicated, validated handler and must
+    # not be settable through this catch-all upsert.
+    ALLOWED_SETTING_KEYS = {
+        'hide_powered_by', 'timezone',
+        'welcome_headline', 'welcome_text',
+        'hide_community_links', 'hide_helping_hand',
+    }
+
+    def _get_system_settings():
+        """Return all system settings as a {key: value} dict."""
+        from application.models import SystemSetting
+        rows = db.session.execute(db.select(SystemSetting)).scalars().all()
+        return {row.key: row.value for row in rows}
+
+    def _emit_settings(sid=None):
+        """Build the full settings payload and emit it."""
+        from application.models import Template
+        from datetime import datetime, timezone
+        templates = db.session.execute(db.select(Template)).scalars().all()
+        tpl_list = [
+            {'id': t.id, 'name': t.name, 'isDefault': bool(getattr(t, 'isDefault', False))}
+            for t in templates
+        ]
+        default_template_id = next(
+            (t.id for t in templates if getattr(t, 'isDefault', False)), None
+        )
+        payload = {
+            'templates': tpl_list,
+            'default_template_id': default_template_id,
+            'system_settings': _get_system_settings(),
+            'server_time': datetime.now(timezone.utc).isoformat(),
+        }
+        socketio.emit('displayhive:admin:stc:admin_settings', payload, room=sid or None)
+
+    @socketio.on('displayhive:admin:cts:get_admin_settings')
+    @admin_handler
+    def get_admin_settings(message=None):
+        _emit_settings(getattr(request, 'sid', None))
+
+    @socketio.on('displayhive:admin:cts:set_default_template')
+    @admin_handler
+    def handle_set_default_template(data):
+        sid = getattr(request, 'sid', None)
+        template_id = data.get('id') if data else None
+        if template_id is None:
+            return
+
+        from application.models import Template
+        all_templates = db.session.execute(db.select(Template)).scalars().all()
+        for t in all_templates:
+            t.isDefault = False
+
+        new_default = db.session.get(Template, template_id)
+        if not new_default:
+            logger.warning('Template with id %s not found', template_id)
+            return
+
+        new_default.isDefault = True
+        db.session.commit()
+
+        try:
+            from application.utils import push_content_list_to_all_screens
+            push_content_list_to_all_screens(socketio, app, db)
+        except Exception:
+            logger.exception('set_default_template: failed to push content to screens')
+
+        _emit_settings(sid)
+
+    @socketio.on('displayhive:admin:cts:set_system_settings')
+    @admin_handler
+    def handle_set_system_settings(data):
+        """Upsert one or more system settings. data = {settings: {key: value, ...}}"""
+        sid = getattr(request, 'sid', None)
+        settings = data.get('settings', {}) if data else {}
+        if not settings:
+            return {'success': False, 'error': 'No settings provided'}
+
+        from application.models import SystemSetting
+        rejected = []
+        for key, value in settings.items():
+            if key not in ALLOWED_SETTING_KEYS:
+                logger.warning('Ignoring unknown system setting key: %r', key)
+                rejected.append(key)
+                continue
+            existing = db.session.execute(
+                db.select(SystemSetting).where(SystemSetting.key == key)
+            ).scalar_one_or_none()
+            if existing:
+                existing.value = value
+            else:
+                db.session.add(SystemSetting(key=key, value=value))
+
+        db.session.commit()
+        _emit_settings(sid)
+
+        if rejected:
+            return {'success': False, 'error': f'Unknown setting(s): {", ".join(rejected)}'}
+        return {'success': True}

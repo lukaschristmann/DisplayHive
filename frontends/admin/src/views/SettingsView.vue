@@ -1,0 +1,298 @@
+<script setup lang="ts">
+import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { useSocket } from '../composables/useSocket'
+import { useToast } from 'primevue/usetoast'
+
+import Card from 'primevue/card'
+import Button from 'primevue/button'
+import InputText from 'primevue/inputtext'
+import Textarea from 'primevue/textarea'
+import Select from 'primevue/select'
+import ToggleSwitch from 'primevue/toggleswitch'
+
+const { on, off, emit, emitWithAck } = useSocket()
+const toast = useToast()
+
+const loading = ref(true)
+const saving = ref(false)
+const timeSaving = ref(false)
+
+const welcomeHeadline = ref('')
+const welcomeText = ref('')
+const hideCommunityLinks = ref(false)
+const hideHelpingHand = ref(false)
+const hidePoweredBy = ref(false)
+
+// Time section
+const serverTimeBase = ref<Date | null>(null)
+const serverTimeReceivedAt = ref(0)
+const displayedServerTime = ref('')
+const selectedTimezone = ref('UTC')
+const correctedTime = ref('')
+
+const timezoneOptions = (Intl as any).supportedValuesOf('timeZone').map((tz: string) => ({
+  label: tz,
+  value: tz,
+}))
+
+let timeTicker: ReturnType<typeof setInterval> | null = null
+
+const updateDisplayedTimes = () => {
+  if (!serverTimeBase.value) return
+  const elapsed = Date.now() - serverTimeReceivedAt.value
+  const current = new Date(serverTimeBase.value.getTime() + elapsed)
+
+  const fmtOpts: Intl.DateTimeFormatOptions = {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }
+
+  displayedServerTime.value =
+    new Intl.DateTimeFormat('en-GB', { ...fmtOpts, timeZone: 'UTC' }).format(current) + ' UTC'
+
+  try {
+    correctedTime.value =
+      new Intl.DateTimeFormat('en-GB', { ...fmtOpts, timeZone: selectedTimezone.value }).format(current) +
+      ` (${selectedTimezone.value})`
+  } catch {
+    correctedTime.value = '—'
+  }
+}
+
+watch(selectedTimezone, updateDisplayedTimes)
+
+const handleSettings = (data: any) => {
+  loading.value = false
+  const sys = data?.system_settings || {}
+  welcomeHeadline.value = sys.welcome_headline ?? 'Welcome to DisplayHive Admin'
+  welcomeText.value = sys.welcome_text ?? 'Use the navigation menu to manage your digital signage system.'
+  hideCommunityLinks.value = sys.hide_community_links === true || sys.hide_community_links === 'true'
+  hideHelpingHand.value = sys.hide_helping_hand === true || sys.hide_helping_hand === 'true'
+  hidePoweredBy.value = sys.hide_powered_by === true || sys.hide_powered_by === 'true'
+
+  if (data?.server_time) {
+    serverTimeBase.value = new Date(data.server_time)
+    serverTimeReceivedAt.value = Date.now()
+  }
+  selectedTimezone.value = sys.timezone ?? 'UTC'
+  updateDisplayedTimes()
+}
+
+onMounted(() => {
+  on('displayhive:admin:stc:admin_settings', handleSettings)
+  emit('displayhive:admin:cts:get_admin_settings')
+  timeTicker = setInterval(updateDisplayedTimes, 1000)
+})
+
+onUnmounted(() => {
+  off('displayhive:admin:stc:admin_settings', handleSettings)
+  if (timeTicker) clearInterval(timeTicker)
+})
+
+const saveDashboardSettings = async () => {
+  saving.value = true
+  try {
+    const ack = await emitWithAck<{ success: boolean; error?: string }>(
+      'displayhive:admin:cts:set_system_settings',
+      {
+        settings: {
+          welcome_headline: welcomeHeadline.value,
+          welcome_text: welcomeText.value,
+          hide_community_links: hideCommunityLinks.value ? 'true' : 'false',
+          hide_helping_hand: hideHelpingHand.value ? 'true' : 'false',
+          hide_powered_by: hidePoweredBy.value ? 'true' : 'false',
+        },
+      },
+    )
+    if (ack?.success) {
+      toast.add({ severity: 'success', summary: 'Saved', detail: 'Dashboard settings updated', life: 2500 })
+    } else {
+      toast.add({ severity: 'error', summary: 'Error', detail: ack?.error || 'Save failed', life: 4000 })
+    }
+  } catch {
+    toast.add({ severity: 'error', summary: 'Error', detail: 'Request failed', life: 4000 })
+  } finally {
+    saving.value = false
+  }
+}
+
+const saveTimeSettings = async () => {
+  timeSaving.value = true
+  try {
+    const ack = await emitWithAck<{ success: boolean; error?: string }>(
+      'displayhive:admin:cts:set_system_settings',
+      { settings: { timezone: selectedTimezone.value } },
+    )
+    if (ack?.success) {
+      toast.add({ severity: 'success', summary: 'Saved', detail: 'Timezone updated', life: 2500 })
+    } else {
+      toast.add({ severity: 'error', summary: 'Error', detail: ack?.error || 'Save failed', life: 4000 })
+    }
+  } catch {
+    toast.add({ severity: 'error', summary: 'Error', detail: 'Request failed', life: 4000 })
+  } finally {
+    timeSaving.value = false
+  }
+}
+</script>
+
+<template>
+  <div class="settings-view">
+
+    <div v-if="loading" class="loading-state">
+      <i class="pi pi-spin pi-spinner" style="font-size: 2rem"></i>
+      <p>Loading settings…</p>
+    </div>
+
+    <template v-else>
+      <Card>
+        <template #title>Dashboard</template>
+        <template #content>
+          <div class="settings-form">
+            <div class="field">
+              <label for="welcome-headline">Welcome headline</label>
+              <InputText
+                id="welcome-headline"
+                v-model="welcomeHeadline"
+                class="w-full"
+                placeholder="Welcome to DisplayHive Admin"
+              />
+            </div>
+            <div class="field">
+              <label for="welcome-text">Welcome text</label>
+              <Textarea
+                id="welcome-text"
+                v-model="welcomeText"
+                class="w-full"
+                rows="3"
+                autoResize
+                placeholder="Use the navigation menu to manage your digital signage system."
+              />
+            </div>
+            <div class="field toggle-field">
+              <label for="hide-community-links">Hide community links</label>
+              <ToggleSwitch id="hide-community-links" v-model="hideCommunityLinks" />
+            </div>
+            <div class="field toggle-field">
+              <label for="hide-helping-hand">Hide "Where a helping hand goes a long way" section</label>
+              <ToggleSwitch id="hide-helping-hand" v-model="hideHelpingHand" />
+            </div>
+            <div class="field toggle-field">
+              <label for="hide-powered-by">Hide "powered by DisplayHive" badge on screens</label>
+              <ToggleSwitch id="hide-powered-by" v-model="hidePoweredBy" />
+            </div>
+            <div class="field-actions">
+              <Button
+                label="Save"
+                icon="pi pi-check"
+                :loading="saving"
+                @click="saveDashboardSettings"
+              />
+            </div>
+          </div>
+        </template>
+      </Card>
+
+      <Card>
+        <template #title>Time</template>
+        <template #content>
+          <div class="settings-form">
+            <div class="field">
+              <label>Server time</label>
+              <InputText
+                :value="displayedServerTime || '—'"
+                class="w-full"
+                readonly
+                tabindex="-1"
+              />
+            </div>
+            <div class="field">
+              <label for="timezone">Timezone</label>
+              <Select
+                id="timezone"
+                v-model="selectedTimezone"
+                :options="timezoneOptions"
+                optionLabel="label"
+                optionValue="value"
+                filter
+                class="w-full"
+                placeholder="Select timezone"
+              />
+            </div>
+            <div class="field">
+              <label>Displayhive Time</label>
+              <InputText
+                :value="correctedTime || '—'"
+                class="w-full"
+                readonly
+                tabindex="-1"
+              />
+            </div>
+            <div class="field-actions">
+              <Button
+                label="Save"
+                icon="pi pi-check"
+                :loading="timeSaving"
+                @click="saveTimeSettings"
+              />
+            </div>
+          </div>
+        </template>
+      </Card>
+    </template>
+
+  </div>
+</template>
+
+<style scoped>
+.settings-view {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  max-width: 640px;
+}
+
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 3rem;
+  color: var(--p-text-muted-color, #9ca3af);
+}
+
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.field label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--p-text-muted-color, #6b7280);
+}
+
+.field-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.toggle-field {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+</style>

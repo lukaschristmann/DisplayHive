@@ -1,0 +1,91 @@
+<!DOCTYPE HTML>
+<html lang="de">
+<head>
+    <title>DisplayHive</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="DisplayHive - Home of digital signage">
+    <meta name="theme-color" content="#000000">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=BBH+Bogle&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/screen/assets/screen.css?v={{ config.ASSET_VERSION }}">
+
+    <style id="template-css"></style>
+    <script>
+        // Inject templated CSS at runtime to avoid editor CSS parsing errors
+        (function(){
+            try {
+                const css = `{{ template_css | safe }}`;
+                const el = document.getElementById('template-css');
+                if (el) el.textContent = css;
+            } catch (e) {
+                console.warn('Failed to inject template CSS', e);
+            }
+        })();
+    </script>
+
+
+    <!-- storage module is now imported where needed -->
+
+   </head>
+ <body>
+
+<!-- Registration overlay -->
+<div id="registration-overlay">
+    <div class="overlay-main">
+        <div class="registration-text">Device Adoption Required</div>
+        <div id="qr-code-container">
+            <div id="qr-code"></div>
+            <p style="color: #000; margin-top: 10px; font-size: 16px; font-weight: normal; letter-spacing: normal; text-transform: none;">Scan this QR code in the admin panel to adopt this device</p>
+        </div>
+        <div class="registration-status">Waiting for adoption...</div>
+    </div>
+    <div class="powered-by">
+        <div class="powered-text">Powered by</div>
+        <img src="/logo_bl.png" alt="DisplayHive logo" class="powered-logo" />
+    </div>
+</div>
+
+<!-- Deactivated overlay -->
+<div id="deactivated-overlay">
+    <div class="overlay-main">
+        <div class="registration-text">Device Deactivated</div>
+        <div class="registration-status">This device has been deactivated by an administrator.</div>
+    </div>
+    <div class="powered-by">
+        <div class="powered-text">Powered by</div>
+        <img src="/logo_bl.png" alt="DisplayHive logo" class="powered-logo" />
+    </div>
+</div>
+
+<div id="main-container">
+   {{ template_html|safe }}
+</div>
+
+{%- if not hide_powered_by %}
+<div id="powered-by-badge">
+    <span class="powered-text">Powered by</span>
+    <span class="powered-domain">displayhive.org</span>
+</div>
+{%- endif %}
+
+    {%- include 'partials/debug_panel.html' -%}
+
+    <!-- Vendor scripts: load before local scripts -->
+    <script defer src="https://cdn.socket.io/4.7.5/socket.io.min.js" integrity="sha384-2huaZvOR9iDzHqslqwpR87isEmrfxqyWOF7hr7BY6KG0+hVKLoEXMPUJw3ynWuhO" crossorigin="anonymous"></script>
+    <!-- QR Code Library - MIT Licensed -->
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <!-- Local scripts: screen bundles -->
+    {%- if config.SCREEN_DEV_SERVER %}
+    <!-- Dev mode (SCREEN_DEV_SERVER=1): load live from the Vite dev server with HMR
+         instead of the pre-built dist/screen/screen.js, so editing frontends/screen/ts
+         takes effect on refresh without a manual `npm run build`. -->
+    <script type="module" src="{{ config.SCREEN_DEV_SERVER_URL }}/dist/screen/@vite/client"></script>
+    <script type="module" src="{{ config.SCREEN_DEV_SERVER_URL }}/dist/screen/ts/screen.ts"></script>
+    {%- else %}
+    <script type="module" defer src="/dist/screen/screen.js?v={{ config.ASSET_VERSION }}"></script>
+    {%- endif %}
+
+
+</body>
+</html>

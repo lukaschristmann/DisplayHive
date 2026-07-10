@@ -1,0 +1,135 @@
+/**
+ * Shared layout helpers used across admin view components.
+ *
+ * These classes were previously copy-pasted into every view's <style scoped>
+ * block. They carry no component-specific meaning so scoping adds no value —
+ * they are intentionally global.
+ *
+ * Views that still have component-specific rules keep a <style scoped> block
+ * for those rules only.
+ */
+
+/* ── Card header row (title + action buttons) ─────────────────────────────── */
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.header-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* ── Filter bar / input ───────────────────────────────────────────────────── */
+.filter-bar {
+  margin-bottom: 1rem;
+}
+
+.filter-input {
+  width: 100%;
+  max-width: 300px;
+}
+
+/* ── DataTable header row (filter left, status tags right) ───────────────── */
+.dt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.dt-header > div {
+  min-width: 0;
+}
+.dt-left {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+.dt-right {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* ── Clickable tags / badges ─────────────────────────────────────────────── */
+.clickable-tag {
+  cursor: pointer;
+  max-width: 40vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clickable-badge {
+  cursor: pointer;
+  user-select: none;
+}
+.clickable-badge:hover {
+  opacity: 0.8;
+}
+
+/* ── Action button group inside table rows ───────────────────────────────── */
+.action-buttons {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+/* ── Dialog shared layout ────────────────────────────────────────────────── */
+.dialog-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem 0;
+}
+
+/* ── Form field (label + input stack) ───────────────────────────────────── */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.field label {
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+/* ── Loading / empty states ──────────────────────────────────────────────── */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  gap: 1rem;
+  color: #888;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: #888;
+}
+
+.empty-state i {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+/* ── Utility ─────────────────────────────────────────────────────────────── */
+.w-full {
+  width: 100%;
+}
+
+.text-muted {
+  color: #888;
+}

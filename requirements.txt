@@ -1,0 +1,14 @@
+flask
+flask-socketio
+flask-sqlalchemy
+flask-cors
+alembic
+pillow
+gunicorn
+eventlet
+requests
+pyjwt
+# psycopg2-binary is only required when deploying with PostgreSQL (DATABASE_URL is set).
+# In the Nix production environment, python3Packages.psycopg2 from nixpkgs is used instead.
+psycopg2-binary
+pytest

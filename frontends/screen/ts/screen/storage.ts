@@ -1,0 +1,60 @@
+/**
+ * Safe localStorage helpers.
+ *
+ * All direct localStorage access is centralised here so the ESLint rule that
+ * disallows ad-hoc `localStorage` calls throughout the codebase has a single
+ * approved exemption point.
+ */
+
+function safeGet(key: string): string | null {
+  try {
+    if (typeof localStorage === "undefined") return null;
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSet(key: string, value: string): void {
+  try {
+    if (typeof localStorage !== "undefined") localStorage.setItem(key, value);
+  } catch {
+    /* intentional: storage may be unavailable (private browsing, quota) */
+  }
+}
+
+function safeRemove(key: string): void {
+  try {
+    if (typeof localStorage !== "undefined") localStorage.removeItem(key);
+  } catch {
+    /* intentional */
+  }
+}
+
+// ── Device key ───────────────────────────────────────────────────────────────
+
+export function getDeviceKey(): string | null {
+  return safeGet("deviceKey");
+}
+
+export function setDeviceKey(key: string | null): void {
+  if (key === null) {
+    safeRemove("deviceKey");
+  } else {
+    safeSet("deviceKey", key);
+  }
+}
+
+// ── Adoption token ───────────────────────────────────────────────────────────
+
+export function getAdoptionToken(): string | null {
+  return safeGet("adoptionToken");
+}
+
+export function setAdoptionToken(token: string): void {
+  safeSet("adoptionToken", token);
+}
+
+export function clearAdoptionToken(): void {
+  safeRemove("adoptionToken");
+}

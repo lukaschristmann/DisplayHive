@@ -1,0 +1,141 @@
+<script setup lang="ts">
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useSocket } from '../composables/useSocket'
+import { useToast } from 'primevue/usetoast'
+
+import Button from 'primevue/button'
+import Dialog from 'primevue/dialog'
+import Select from 'primevue/select'
+
+interface Container {
+  id?: number
+  name: string
+  title: string
+  order: number
+  contentCount: number
+  contenttype_ids?: number[]
+}
+
+interface ContentElement {
+  id: number
+  title: string
+  active: boolean
+  duration: number
+  contentcontainer: string
+  contenttypeName: string
+}
+
+interface ContentType {
+  id: number
+  name: string
+}
+
+const props = defineProps<{
+  visible: boolean
+  content: ContentElement | null
+  containers: Container[]
+  contentTypes: ContentType[]
+}>()
+
+const emit = defineEmits<{
+  'update:visible': [boolean]
+  moved: []
+}>()
+
+const toast = useToast()
+const { on, off, emit: socketEmit } = useSocket()
+
+const selectedTargetContainer = ref<string | null>(null)
+
+watch(() => props.visible, (val) => {
+  if (val && props.content) {
+    selectedTargetContainer.value = props.content.contentcontainer || null
+  }
+})
+
+const allowedContainersForMove = computed(() => {
+  if (!props.content) return []
+  const contentType = props.contentTypes.find(ct => ct.name === props.content!.contenttypeName)
+  if (!contentType || !contentType.id) return props.containers
+  return props.containers.filter(c =>
+    c.contenttype_ids && c.contenttype_ids.includes(contentType.id)
+  )
+})
+
+const submitMoveContent = () => {
+  if (!props.content) return
+  const targetContainer = selectedTargetContainer.value || ''
+  socketEmit('displayhive:admin:cts:move_content_element_container', {
+    content_element_id: props.content.id,
+    target_container: targetContainer
+  })
+}
+
+const handleMoveResult = (data: { success: boolean; content_element_id?: number; container?: string; error?: string }) => {
+  if (data.success) {
+    toast.add({ severity: 'success', summary: 'Success', detail: 'Content moved successfully', life: 3000 })
+    emit('update:visible', false)
+    emit('moved')
+  } else {
+    toast.add({ severity: 'error', summary: 'Error', detail: data.error || 'Failed to move content', life: 5000 })
+  }
+}
+
+onMounted(() => {
+  on('displayhive:admin:stc:move_content_element_result', handleMoveResult)
+})
+
+onUnmounted(() => {
+  off('displayhive:admin:stc:move_content_element_result', handleMoveResult)
+})
+</script>
+
+<template>
+  <Dialog
+    :visible="visible"
+    @update:visible="emit('update:visible', $event)"
+    :header="`Move Content: ${content?.title || ''}`"
+    modal
+    :style="{ width: '500px' }"
+  >
+    <div class="dialog-content">
+      <p class="move-info">
+        Select a target container to move this content, or select "Unassign" to remove it from all containers.
+      </p>
+      <div class="field">
+        <label for="target-container">Target Container</label>
+        <Select
+          id="target-container"
+          v-model="selectedTargetContainer"
+          :options="[
+            { name: '(Unassign)', value: null },
+            ...allowedContainersForMove.map(c => ({ name: c.title, value: c.name }))
+          ]"
+          optionLabel="name"
+          optionValue="value"
+          placeholder="Select container or unassign"
+          class="w-full"
+        />
+        <small v-if="allowedContainersForMove.length === 0" class="text-muted">
+          No allowed containers for this content type. You can only unassign it.
+        </small>
+      </div>
+    </div>
+    <template #footer>
+      <Button label="Cancel" @click="emit('update:visible', false)" text />
+      <Button
+        label="Move"
+        @click="submitMoveContent"
+        :disabled="selectedTargetContainer === (content?.contentcontainer || null)"
+      />
+    </template>
+  </Dialog>
+</template>
+
+<style scoped>
+.move-info {
+  margin-bottom: 1rem;
+  color: #666;
+  font-size: 0.875rem;
+}
+</style>
