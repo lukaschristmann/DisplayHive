@@ -59,6 +59,11 @@ const router = createRouter({
       component: () => import('../views/ScreenGroupsView.vue'),
     },
     {
+      path: '/demo',
+      name: 'demo',
+      component: () => import('../views/DemoModeView.vue'),
+    },
+    {
       path: '/importexport',
       name: 'importexport',
       component: () => import('../views/ImportExportView.vue'),

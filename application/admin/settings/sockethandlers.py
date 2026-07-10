@@ -16,6 +16,7 @@ def register_admin_settings_handlers(socketio, app, db):
         'hide_powered_by', 'timezone',
         'welcome_headline', 'welcome_text',
         'hide_community_links', 'hide_helping_hand',
+        'hide_demo_mode',
     }
 
     def _get_system_settings():

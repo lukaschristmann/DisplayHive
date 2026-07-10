@@ -5,6 +5,7 @@ const gitCommit = ref(__GIT_COMMIT__)
 import { RouterView, useRouter, useRoute } from 'vue-router'
 import { useSocket } from './composables/useSocket'
 import { useAuthStore } from './stores/auth'
+import { useSettingsStore } from './stores/settings'
 import LoginView from './views/LoginView.vue'
 
 // PrimeVue components
@@ -19,6 +20,7 @@ const router = useRouter()
 const route = useRoute()
 const { connect, isConnected, reconnectFailed, on } = useSocket()
 const authStore = useAuthStore()
+const settingsStore = useSettingsStore()
 
 on('connect_error', (err: unknown) => {
   const message = (err as { message?: string } | null)?.message
@@ -95,6 +97,7 @@ watch(isConnected, (connected) => {
       window.location.reload()
     }
     hasEverConnected.value = true
+    settingsStore.fetchSettings()
   } else if (hasEverConnected.value) {
     // Only reload on reconnect if the disconnect lasts longer than the grace
     // period — brief polling hiccups (~1 s) must not trigger a page reload.
@@ -132,6 +135,15 @@ watch(
   },
 )
 
+watch(
+  () => [settingsStore.hideDemoMode, route.name] as const,
+  ([hidden, name]) => {
+    if (hidden && name === 'demo') {
+      router.replace('/')
+    }
+  },
+)
+
 onMounted(async () => {
   await authStore.restore()
   if (authStore.isAuthenticated) {
@@ -145,6 +157,15 @@ const menuItems = computed(() => [
     icon: 'pi pi-home',
     command: () => router.push('/'),
   },
+  ...(settingsStore.hideDemoMode
+    ? []
+    : [
+        {
+          label: 'Demo Mode',
+          icon: 'pi pi-sparkles',
+          command: () => router.push('/demo'),
+        },
+      ]),
   {
     label: 'Content',
     icon: 'pi pi-folder',
@@ -232,6 +253,7 @@ const menuItems = computed(() => [
 const pageTitle = computed(() => {
   const titles: Record<string, string> = {
     home: 'Dashboard',
+    demo: 'Demo Mode',
     devices: 'Devices',
     screens: 'Screens',
     screengroups: 'Screen Groups',

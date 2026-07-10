@@ -83,6 +83,17 @@ export default defineConfig({
         target: backendUrl,
         changeOrigin: true,
       },
+      // Forward the demo-content REST endpoints, same rationale as above —
+      // must not be a shorter prefix like `/admin/demo`, which would also
+      // match (and hijack) a future `/admin/demo...` SPA page route.
+      '/admin/demo/list': {
+        target: backendUrl,
+        changeOrigin: true,
+      },
+      '/admin/demo/import': {
+        target: backendUrl,
+        changeOrigin: true,
+      },
       // Forward the admin auth REST endpoints (login/session-check) to the
       // Flask backend, same rationale as export/download and import/upload above.
       '/admin/api': {

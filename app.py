@@ -400,6 +400,59 @@ def admin_spa(filename='index.html'):
 
 
 _MEDIA_FOLDER = os.path.join(os.path.dirname(__file__), 'static', 'media')
+_EXAMPLECONTENT_FOLDER = os.path.join(os.path.dirname(__file__), 'examplecontent')
+_EXAMPLECONTENT_DESC = os.path.join(_EXAMPLECONTENT_FOLDER, 'exampledesc.json')
+
+
+def _demo_mode_hidden() -> bool:
+    """Whether the 'hide_demo_mode' system setting is enabled.
+
+    When enabled, Demo Mode must be unreachable through the API too — not
+    just hidden in the nav — so both /admin/demo/* routes check this and
+    404 rather than relying on the frontend alone to hide the page.
+    """
+    from application.models import SystemSetting
+    row = db.session.execute(
+        db.select(SystemSetting).where(SystemSetting.key == 'hide_demo_mode')
+    ).scalar_one_or_none()
+    return row is not None and row.value == 'true'
+
+
+def _restore_from_zip_bytes(raw: bytes) -> dict:
+    """Replace the media folder + database from an export-format ZIP's bytes.
+
+    Shared by the manual upload endpoint and the demo-content importer, which
+    both need to: pull db.json out of the zip, wipe the media folder and
+    restore any files it contains, then run import_database.
+    """
+    import io
+    import zipfile
+    import shutil
+    from application.admin.importexport.helper import import_database
+
+    with zipfile.ZipFile(io.BytesIO(raw), 'r') as zf:
+        if 'db.json' not in zf.namelist():
+            return {'success': False, 'error': 'ZIP does not contain db.json'}
+
+        db_payload = json.loads(zf.read('db.json').decode('utf-8'))
+
+        # Clear existing media files before restoring
+        if os.path.isdir(_MEDIA_FOLDER):
+            shutil.rmtree(_MEDIA_FOLDER)
+        os.makedirs(_MEDIA_FOLDER, exist_ok=True)
+
+        for name in zf.namelist():
+            if name.startswith('media/') and not name.endswith('/'):
+                rel = name[len('media/'):]
+                target = os.path.join(_MEDIA_FOLDER, rel)
+                # Guard against path traversal
+                if not os.path.realpath(target).startswith(os.path.realpath(_MEDIA_FOLDER) + os.sep):
+                    continue
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                with zf.open(name) as src, open(target, 'wb') as dst:
+                    dst.write(src.read())
+
+    return import_database(app, db, db_payload)
 
 
 @app.route('/admin/export/download')
@@ -437,9 +490,7 @@ def admin_export_download():
 @require_jwt_auth(app)
 def admin_import_upload():
     """Accept a ZIP (or legacy JSON) upload and restore the database + media files."""
-    import io
     import zipfile
-    import shutil
     from application.admin.importexport.helper import import_database
 
     file = request.files.get('file')
@@ -451,29 +502,10 @@ def admin_import_upload():
     if filename.lower().endswith('.zip'):
         raw = file.read()
         try:
-            with zipfile.ZipFile(io.BytesIO(raw), 'r') as zf:
-                if 'db.json' not in zf.namelist():
-                    return jsonify({'success': False, 'error': 'ZIP does not contain db.json'}), 400
-
-                db_payload = json.loads(zf.read('db.json').decode('utf-8'))
-
-                # Clear existing media files before restoring
-                if os.path.isdir(_MEDIA_FOLDER):
-                    shutil.rmtree(_MEDIA_FOLDER)
-                os.makedirs(_MEDIA_FOLDER, exist_ok=True)
-
-                for name in zf.namelist():
-                    if name.startswith('media/') and not name.endswith('/'):
-                        rel = name[len('media/'):]
-                        target = os.path.join(_MEDIA_FOLDER, rel)
-                        # Guard against path traversal
-                        if not os.path.realpath(target).startswith(os.path.realpath(_MEDIA_FOLDER) + os.sep):
-                            continue
-                        os.makedirs(os.path.dirname(target), exist_ok=True)
-                        with zf.open(name) as src, open(target, 'wb') as dst:
-                            dst.write(src.read())
+            result = _restore_from_zip_bytes(raw)
         except zipfile.BadZipFile:
             return jsonify({'success': False, 'error': 'Invalid ZIP file'}), 400
+        return jsonify(result)
 
     elif filename.lower().endswith('.json'):
         try:
@@ -485,6 +517,55 @@ def admin_import_upload():
         return jsonify({'success': False, 'error': 'Unsupported file type — upload a .zip or .json file'}), 400
 
     result = import_database(app, db, db_payload)
+    return jsonify(result)
+
+
+@app.route('/admin/demo/list')
+@require_jwt_auth(app)
+def admin_demo_list():
+    """List the available demo-content packages described in exampledesc.json."""
+    if _demo_mode_hidden():
+        return "Not Found", 404
+    if not os.path.isfile(_EXAMPLECONTENT_DESC):
+        return jsonify([])
+    with open(_EXAMPLECONTENT_DESC, 'r', encoding='utf-8') as f:
+        return jsonify(json.load(f))
+
+
+@app.route('/admin/demo/import', methods=['POST'])
+@require_jwt_auth(app)
+def admin_demo_import():
+    """Wipe the database (except user accounts) and media, then import a bundled demo package."""
+    import zipfile
+
+    if _demo_mode_hidden():
+        return "Not Found", 404
+
+    payload = request.get_json(silent=True) or {}
+    filename = payload.get('filename') or ''
+
+    if not os.path.isfile(_EXAMPLECONTENT_DESC):
+        return jsonify({'success': False, 'error': 'No demo content available'}), 404
+
+    with open(_EXAMPLECONTENT_DESC, 'r', encoding='utf-8') as f:
+        available = {entry['filename'] for entry in json.load(f)}
+
+    # Only allow filenames explicitly listed in exampledesc.json — guards
+    # against path traversal via an arbitrary `filename` value in the request.
+    if filename not in available:
+        return jsonify({'success': False, 'error': 'Unknown demo package'}), 400
+
+    zip_path = os.path.join(_EXAMPLECONTENT_FOLDER, filename)
+    if not os.path.isfile(zip_path):
+        return jsonify({'success': False, 'error': 'Demo package file missing on server'}), 404
+
+    with open(zip_path, 'rb') as f:
+        raw = f.read()
+
+    try:
+        result = _restore_from_zip_bytes(raw)
+    except zipfile.BadZipFile:
+        return jsonify({'success': False, 'error': 'Invalid ZIP file'}), 400
     return jsonify(result)
 
 

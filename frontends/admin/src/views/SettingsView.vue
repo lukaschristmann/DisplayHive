@@ -22,6 +22,7 @@ const welcomeText = ref('')
 const hideCommunityLinks = ref(false)
 const hideHelpingHand = ref(false)
 const hidePoweredBy = ref(false)
+const hideDemoMode = ref(false)
 
 // Time section
 const serverTimeBase = ref<Date | null>(null)
@@ -74,6 +75,7 @@ const handleSettings = (data: any) => {
   hideCommunityLinks.value = sys.hide_community_links === true || sys.hide_community_links === 'true'
   hideHelpingHand.value = sys.hide_helping_hand === true || sys.hide_helping_hand === 'true'
   hidePoweredBy.value = sys.hide_powered_by === true || sys.hide_powered_by === 'true'
+  hideDemoMode.value = sys.hide_demo_mode === true || sys.hide_demo_mode === 'true'
 
   if (data?.server_time) {
     serverTimeBase.value = new Date(data.server_time)
@@ -106,6 +108,7 @@ const saveDashboardSettings = async () => {
           hide_community_links: hideCommunityLinks.value ? 'true' : 'false',
           hide_helping_hand: hideHelpingHand.value ? 'true' : 'false',
           hide_powered_by: hidePoweredBy.value ? 'true' : 'false',
+          hide_demo_mode: hideDemoMode.value ? 'true' : 'false',
         },
       },
     )
@@ -185,6 +188,10 @@ const saveTimeSettings = async () => {
             <div class="field toggle-field">
               <label for="hide-powered-by">Hide "powered by DisplayHive" badge on screens</label>
               <ToggleSwitch id="hide-powered-by" v-model="hidePoweredBy" />
+            </div>
+            <div class="field toggle-field">
+              <label for="hide-demo-mode">Hide Demo Mode (removes it from the top bar and blocks the API)</label>
+              <ToggleSwitch id="hide-demo-mode" v-model="hideDemoMode" />
             </div>
             <div class="field-actions">
               <Button
