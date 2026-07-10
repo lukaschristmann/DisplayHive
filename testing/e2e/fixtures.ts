@@ -65,15 +65,15 @@ export async function seedAdminAuth(
 
   // Seed the JWT before the app boots so App.vue's authStore.restore()
   // finds a valid session and useSocket.ts's connect() sends it immediately.
-  // Uses sessionStorage to match the app's token store (see stores/auth.ts).
+  // Uses localStorage to match the app's token store (see stores/auth.ts).
   await page.addInitScript(
     ({ token, username }: { token: string; username: string }) => {
       try {
-        // Runs in the browser page; sessionStorage exists there at runtime but
+        // Runs in the browser page; localStorage exists there at runtime but
         // isn't in the Node-oriented tsconfig lib, so reach it via globalThis.
-        const ss = (globalThis as any).sessionStorage
-        ss.setItem('displayhive_admin_token', token)
-        ss.setItem('displayhive_admin_username', username)
+        const ls = (globalThis as any).localStorage
+        ls.setItem('displayhive_admin_token', token)
+        ls.setItem('displayhive_admin_username', username)
       } catch (e) {}
     },
     { token, username },

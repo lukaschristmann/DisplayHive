@@ -17,12 +17,23 @@ const Logo = '/admin/logo_wh.png'
 
 const router = useRouter()
 const route = useRoute()
-const { connect, isConnected, on } = useSocket()
+const { connect, isConnected, reconnectFailed, on } = useSocket()
 const authStore = useAuthStore()
 
 on('connect_error', (err: unknown) => {
   const message = (err as { message?: string } | null)?.message
   if (message === 'invalid_token') {
+    authStore.logout()
+  }
+})
+
+// Socket.IO gives up retrying after its configured reconnection attempts are
+// exhausted and never tries again on its own. Without this, a prolonged
+// outage (or being logged out server-side while offline) would leave the
+// user stuck on the greyed-out "Disconnected" overlay indefinitely. Drop
+// back to the login screen instead so they have a way forward.
+watch(reconnectFailed, (failed) => {
+  if (failed) {
     authStore.logout()
   }
 })

@@ -4,6 +4,12 @@ import { io, type Socket } from 'socket.io-client'
 // Singleton socket instance shared across all composable calls
 let socket: Socket | null = null
 const isConnected = ref(false)
+// Flips true once the underlying Manager gives up retrying (reconnectionAttempts
+// exhausted) or the server rejects the handshake outright. Socket.IO does not
+// retry on its own past that point, so without this the UI would otherwise be
+// stuck on the "Disconnected" overlay forever. Callers (App.vue) watch this to
+// drop back to the login screen instead of leaving the user stranded.
+const reconnectFailed = ref(false)
 
 // Queues for listeners/emits registered before the socket is available.
 // Flushed automatically once the socket connects.
@@ -46,9 +52,9 @@ export function useSocket() {
       (import.meta.env.VITE_SOCKET_URL as string) ||
       window.location.origin
     // JWT issued by POST /admin/api/auth/login (see stores/auth.ts, which
-    // owns this same sessionStorage key — kept as a literal here to avoid a
+    // owns this same localStorage key — kept as a literal here to avoid a
     // circular import between the auth store and this composable).
-    const token = sessionStorage.getItem('displayhive_admin_token')
+    const token = localStorage.getItem('displayhive_admin_token')
 
     socket = io(url, {
       // Sent only in the handshake `auth` payload (not `query`) so the JWT
@@ -86,6 +92,7 @@ export function useSocket() {
 
     socket.on('connect', () => {
       isConnected.value = true
+      reconnectFailed.value = false
       // Client does not request to join the admins room directly. The server
       // decides admin membership based on the JWT sent in the handshake `auth`.
 
@@ -100,12 +107,28 @@ export function useSocket() {
       }
     })
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', (reason) => {
       isConnected.value = false
+      // 'io server disconnect' means the server itself closed the socket
+      // (e.g. rejecting a now-invalid session) — Socket.IO's built-in
+      // reconnection logic deliberately does NOT retry in this case, so the
+      // client must kick off a fresh connect attempt by hand. That attempt
+      // either succeeds, or fails the handshake and surfaces via
+      // 'connect_error' (e.g. invalid_token, handled in App.vue).
+      if (reason === 'io server disconnect') {
+        socket?.connect()
+      }
     })
 
     socket.on('connect_error', (error) => {
       console.error('[useSocket] connection error:', error)
+    })
+
+    // Reconnection attempts/backoff are managed by the Manager (`socket.io`),
+    // not the Socket itself — these events never fire on `socket.on(...)`.
+    socket.io.on('reconnect_failed', () => {
+      console.error('[useSocket] reconnection attempts exhausted, giving up')
+      reconnectFailed.value = true
     })
 
     return socket
@@ -118,6 +141,7 @@ export function useSocket() {
       socket = null
       isConnected.value = false
     }
+    reconnectFailed.value = false
     pendingListeners.length = 0
     pendingEmits.length = 0
   }
@@ -207,6 +231,7 @@ export function useSocket() {
 
   return {
     isConnected,
+    reconnectFailed,
     connect,
     disconnect,
     emit,

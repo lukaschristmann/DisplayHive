@@ -11,9 +11,9 @@ test.describe('Login form', () => {
     // Runs after the fixture's own addInitScript calls, so this clears the
     // session they seeded — the page loads unauthenticated from here on.
     await page.addInitScript(() => {
-      const ss = (globalThis as any).sessionStorage
-      ss.removeItem('displayhive_admin_token')
-      ss.removeItem('displayhive_admin_username')
+      const ls = (globalThis as any).localStorage
+      ls.removeItem('displayhive_admin_token')
+      ls.removeItem('displayhive_admin_username')
     })
   })
 
@@ -62,7 +62,7 @@ test.describe('Login form', () => {
 
     await expect(page.locator('[data-testid="login-username"]')).toBeVisible({ timeout: 5000 })
     const token = await page.evaluate(() =>
-      (globalThis as any).sessionStorage.getItem('displayhive_admin_token'),
+      (globalThis as any).localStorage.getItem('displayhive_admin_token'),
     )
     expect(token).toBeNull()
   })

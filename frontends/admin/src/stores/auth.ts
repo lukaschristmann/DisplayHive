@@ -6,38 +6,82 @@ const TOKEN_STORAGE_KEY = 'displayhive_admin_token'
 const USERNAME_STORAGE_KEY = 'displayhive_admin_username'
 
 /**
+ * Decode a JWT's `exp` claim (seconds since epoch) without verifying the
+ * signature — purely for scheduling a client-side auto-logout timer. The
+ * server is the source of truth: every authenticated request/socket connect
+ * re-validates the token, so a forged/tampered `exp` here can at most make
+ * the UI log out early or late, never grant access.
+ */
+const decodeExpiryMs = (token: string): number | null => {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1] ?? ''))
+    return typeof payload.exp === 'number' ? payload.exp * 1000 : null
+  } catch {
+    return null
+  }
+}
+
+/**
  * Admin authentication store: holds the current JWT + username, persists
- * them to sessionStorage, and drives login/logout against the backend.
+ * them to localStorage, and drives login/logout against the backend.
  *
- * sessionStorage (rather than localStorage) is used deliberately: the token is
- * not written to disk, is cleared when the tab closes, and is not shared with
- * other tabs — shrinking the window and blast radius of any token theft. The
- * JWT must stay readable by JS because it is sent as a Bearer header for HTTP
- * admin API calls and as `auth.token` in the Socket.IO handshake (see
- * composables/useSocket.ts); an httpOnly cookie would remove even that exposure
- * but requires server-side session + CSRF handling.
+ * localStorage (rather than sessionStorage) is used deliberately so that
+ * logging in or out in one tab/window is reflected in every other open
+ * tab/window (via the native `storage` event, below) instead of each tab
+ * carrying its own independent session. The token still expires on its own
+ * — the backend issues it with a 12h TTL (see application/auth.py
+ * TOKEN_TTL) that every request/socket connect re-validates — and
+ * `scheduleExpiry` mirrors that TTL client-side so a stale tab logs itself
+ * out proactively rather than sitting on an expired token until its next
+ * API call happens to fail.
  */
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref<string | null>(sessionStorage.getItem(TOKEN_STORAGE_KEY))
-  const username = ref<string | null>(sessionStorage.getItem(USERNAME_STORAGE_KEY))
+  const token = ref<string | null>(localStorage.getItem(TOKEN_STORAGE_KEY))
+  const username = ref<string | null>(localStorage.getItem(USERNAME_STORAGE_KEY))
   // Starts true whenever a token is present so the app doesn't flash the
   // login form while `restore()` confirms the token is still valid.
   const restoring = ref(!!token.value)
 
   const isAuthenticated = computed(() => !!token.value)
 
+  let expiryTimer: ReturnType<typeof setTimeout> | null = null
+
+  const clearExpiryTimer = () => {
+    if (expiryTimer !== null) {
+      clearTimeout(expiryTimer)
+      expiryTimer = null
+    }
+  }
+
+  // Auto-logout when the token's own `exp` passes, so an idle tab doesn't
+  // linger on a dead session. setTimeout is capped at ~24.8 days internally;
+  // the 12h token TTL is well within that, so no chunking is needed here.
+  const scheduleExpiry = (forToken: string) => {
+    clearExpiryTimer()
+    const expiresAt = decodeExpiryMs(forToken)
+    if (expiresAt === null) return
+    const delay = expiresAt - Date.now()
+    if (delay <= 0) {
+      logout()
+      return
+    }
+    expiryTimer = setTimeout(() => logout(), delay)
+  }
+
   const setSession = (newToken: string, newUsername: string) => {
     token.value = newToken
     username.value = newUsername
-    sessionStorage.setItem(TOKEN_STORAGE_KEY, newToken)
-    sessionStorage.setItem(USERNAME_STORAGE_KEY, newUsername)
+    localStorage.setItem(TOKEN_STORAGE_KEY, newToken)
+    localStorage.setItem(USERNAME_STORAGE_KEY, newUsername)
+    scheduleExpiry(newToken)
   }
 
   const clearSession = () => {
     token.value = null
     username.value = null
-    sessionStorage.removeItem(TOKEN_STORAGE_KEY)
-    sessionStorage.removeItem(USERNAME_STORAGE_KEY)
+    localStorage.removeItem(TOKEN_STORAGE_KEY)
+    localStorage.removeItem(USERNAME_STORAGE_KEY)
+    clearExpiryTimer()
   }
 
   /**
@@ -89,6 +133,7 @@ export const useAuthStore = defineStore('auth', () => {
       } else {
         const result = await response.json()
         if (result.username) username.value = result.username
+        scheduleExpiry(token.value)
       }
     } catch {
       // Network error: keep the stored token: the socket connect attempt
@@ -97,6 +142,23 @@ export const useAuthStore = defineStore('auth', () => {
       restoring.value = false
     }
   }
+
+  // Cross-tab sync: localStorage writes in one tab fire a native 'storage'
+  // event in every *other* open tab (never the tab that wrote it), so this
+  // is enough to mirror login/logout everywhere without polling or a
+  // BroadcastChannel. Each tab still owns its own socket connection —
+  // logout() below disconnects this tab's socket; a fresh login elsewhere
+  // flips `isAuthenticated`, which App.vue's watcher picks up to connect().
+  window.addEventListener('storage', (event) => {
+    if (event.key !== TOKEN_STORAGE_KEY) return
+    if (event.newValue) {
+      token.value = event.newValue
+      username.value = localStorage.getItem(USERNAME_STORAGE_KEY)
+      scheduleExpiry(event.newValue)
+    } else {
+      logout()
+    }
+  })
 
   /** Returns an `Authorization` header object for authenticated fetch() calls. */
   const authHeader = (): Record<string, string> =>
