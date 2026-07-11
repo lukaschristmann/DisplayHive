@@ -253,6 +253,10 @@ const contentTypes = ref<ContentType[]>([])
 
 const moveContent = ref<ContentElement | null>(null)
 const showMoveContentDialog = ref(false)
+// Containers from every template (not just the default one) — the Move
+// dialog needs to offer every container a content element could live in,
+// regardless of which template it belongs to.
+const allContainersForMove = ref<Container[]>([])
 
 const handleContainers = (data: { containers: Container[] }) => {
   // Guard against spurious fires from other views that share this event (e.g. TemplatesView)
@@ -297,6 +301,10 @@ const handleContentTypes = (data: { data?: ContentType[]; contenttypes?: Content
   contentTypes.value = data.data || data.contenttypes || []
 }
 
+const handleAllContainersForMove = (data: { containers: Container[] }) => {
+  allContainersForMove.value = data.containers || []
+}
+
 onMounted(() => {
   on('displayhive:admin:stc:containers', handleContainers)
   on('displayhive:admin:stc:content_list', handleContentList)
@@ -306,6 +314,7 @@ onMounted(() => {
   on('displayhive:admin:stc:content_by_screengroup', handleContentByScreengroup)
   on('displayhive:admin:stc:content_by_screengroup_and_container', handleContentBySgAndContainer)
   on('displayhive:admin:stc:containers_for_screen', handleContainersForScreen)
+  on('displayhive:admin:stc:all_containers_for_picker', handleAllContainersForMove)
 
   pendingContainerRequests.value++
   incPending()
@@ -314,6 +323,7 @@ onMounted(() => {
   incPending()
   emit('displayhive:admin:cts:get_unassigned_content')
   emit('displayhive:admin:cts:get_screengroups')
+  emit('displayhive:admin:cts:get_all_containers_for_picker')
 })
 
 onUnmounted(() => {
@@ -325,6 +335,7 @@ onUnmounted(() => {
   off('displayhive:admin:stc:content_by_screengroup', handleContentByScreengroup)
   off('displayhive:admin:stc:content_by_screengroup_and_container', handleContentBySgAndContainer)
   off('displayhive:admin:stc:containers_for_screen', handleContainersForScreen)
+  off('displayhive:admin:stc:all_containers_for_picker', handleAllContainersForMove)
 })
 
 
@@ -620,7 +631,7 @@ const copyContent = (content: ContentElement) => {
   <MoveContentDialog
     v-model:visible="showMoveContentDialog"
     :content="moveContent"
-    :containers="containers"
+    :containers="allContainersForMove"
     :contentTypes="contentTypes"
     @moved="refreshData"
   />

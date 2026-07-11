@@ -12,8 +12,9 @@ interface Container {
   name: string
   title: string
   order: number
-  contentCount: number
+  contentCount?: number
   contenttype_ids?: number[]
+  template_name?: string
 }
 
 interface ContentElement {
@@ -53,11 +54,32 @@ watch(() => props.visible, (val) => {
   }
 })
 
+// `ContentElement.contentcontainer` is stored as a bare name string with no
+// template affiliation, so containers are addressed by name only — a name
+// that exists in more than one template (props.containers spans every
+// template) refers to the same move target either way. Dedupe by name,
+// unioning contenttype_ids and collecting template names for the label.
+const dedupedContainers = computed(() => {
+  const byName = new Map<string, Container & { templateNames: string[] }>()
+  for (const c of props.containers) {
+    const existing = byName.get(c.name)
+    if (existing) {
+      existing.contenttype_ids = [...new Set([...(existing.contenttype_ids || []), ...(c.contenttype_ids || [])])]
+      if (c.template_name && !existing.templateNames.includes(c.template_name)) {
+        existing.templateNames.push(c.template_name)
+      }
+    } else {
+      byName.set(c.name, { ...c, templateNames: c.template_name ? [c.template_name] : [] })
+    }
+  }
+  return [...byName.values()]
+})
+
 const allowedContainersForMove = computed(() => {
   if (!props.content) return []
   const contentType = props.contentTypes.find(ct => ct.name === props.content!.contenttypeName)
-  if (!contentType || !contentType.id) return props.containers
-  return props.containers.filter(c =>
+  if (!contentType || !contentType.id) return dedupedContainers.value
+  return dedupedContainers.value.filter(c =>
     c.contenttype_ids && c.contenttype_ids.includes(contentType.id)
   )
 })
@@ -109,7 +131,10 @@ onUnmounted(() => {
           v-model="selectedTargetContainer"
           :options="[
             { name: '(Unassign)', value: null },
-            ...allowedContainersForMove.map(c => ({ name: c.title, value: c.name }))
+            ...allowedContainersForMove.map(c => ({
+              name: c.templateNames.length ? `${c.title} (${c.templateNames.join(', ')})` : c.title,
+              value: c.name,
+            }))
           ]"
           optionLabel="name"
           optionValue="value"
