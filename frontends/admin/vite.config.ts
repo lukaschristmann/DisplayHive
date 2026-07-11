@@ -100,6 +100,14 @@ export default defineConfig({
         target: backendUrl,
         changeOrigin: true,
       },
+      // Forward Flask's static file route (uploaded media, media previews,
+      // logos) to the backend. Unlike the /admin/* entries above this is a
+      // safe prefix match — no SPA route starts with /static, so there's no
+      // risk of shadowing a page route.
+      '/static': {
+        target: backendUrl,
+        changeOrigin: true,
+      },
     },
   },
   resolve: {
