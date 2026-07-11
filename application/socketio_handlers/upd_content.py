@@ -38,6 +38,7 @@ def _build_payload(db, screen):
         template = get_default_template(db)
 
     template_payload = {
+        'name': getattr(template, 'name', '') or '',
         'html': getattr(template, 'html', '') or '',
         'css':  getattr(template, 'css',  '') or ''
     }

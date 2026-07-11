@@ -123,6 +123,7 @@ function applyScreenName(cfg: DeviceConfig, prev: DeviceConfig | null): void {
   window.assignedScreen = newName;
   const el = document.getElementById("debug-screen-name");
   if (el) el.textContent = newName;
+  window.debugPanel?.push("Screen Info", "Screen", "Name", newName);
   log("info", "applyScreenName", "Assigned screen name:", newName);
 }
 
@@ -359,6 +360,12 @@ export function setupSocketHandlers(socket: any): void {
 
       // Apply template HTML and CSS if provided
       if (template) {
+        window.debugPanel?.push(
+          "Screen Info",
+          "Template",
+          "Name",
+          typeof template.name === "string" && template.name ? template.name : "—",
+        );
         if (typeof template.html === "string") {
           const mainContainer = document.getElementById("main-container");
           if (mainContainer) {
