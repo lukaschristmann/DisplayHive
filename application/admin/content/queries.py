@@ -314,28 +314,47 @@ def register_content_query_handlers(socketio, app, db):
     @socketio.on('displayhive:admin:cts:get_unassigned_content')
     @admin_handler
     def handle_get_unassigned_content(data=None):
-        """Get all content not assigned to any container of the current template."""
+        """Get all content that is unassigned.
+
+        A content item counts as unassigned if:
+          - its contentcontainer is empty or null, or
+          - its contentcontainer name does not exist in any of the templates
+            used by the screens it is actually assigned to (via its
+            screengroups). Content with no screengroups, or whose
+            screengroups have no screens in them, has no templates to match
+            against and is therefore also unassigned.
+        """
         default_template = get_default_template(db)
-        if default_template and getattr(default_template, 'contentcontainers', None):
-            container_names = {cc.name for cc in default_template.contentcontainers}
-        else:
+
+        def _template_for_screen(screen):
+            return screen.template if screen.template_id else default_template
+
+        all_content = db.session.execute(
+            db.select(ContentElement).order_by(ContentElement.title)
+        ).scalars().all()
+
+        unassigned = []
+        for ce in all_content:
+            if not ce.contentcontainer:
+                unassigned.append(ce)
+                continue
+
+            assigned_screens = {
+                screen
+                for sg in (ce.screengroups or [])
+                for screen in (sg.screens or [])
+            }
+
             container_names = set()
+            for screen in assigned_screens:
+                tpl = _template_for_screen(screen)
+                if tpl:
+                    container_names.update(cc.name for cc in (tpl.contentcontainers or []))
 
-        # Query for content where contentcontainer is NULL or not in the current template
-        if container_names:
-            query = db.select(ContentElement).where(
-                db.or_(
-                    ContentElement.contentcontainer == None,
-                    ContentElement.contentcontainer == '',
-                    ~ContentElement.contentcontainer.in_(list(container_names))
-                )
-            ).order_by(ContentElement.title)
-        else:
-            # No template containers configured → all items are unassigned
-            query = db.select(ContentElement).order_by(ContentElement.title)
+            if ce.contentcontainer not in container_names:
+                unassigned.append(ce)
 
-        content_items = db.session.execute(query).scalars().all()
-        content_list = _emit_content_list('displayhive:admin:stc:unassigned_content', {}, content_items)
+        content_list = _emit_content_list('displayhive:admin:stc:unassigned_content', {}, unassigned)
         logger.debug('Sent %s unassigned items', len(content_list))
 
     @socketio.on('displayhive:admin:cts:get_all_content_element')
