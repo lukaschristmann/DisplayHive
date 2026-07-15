@@ -1,7 +1,7 @@
 services:
   displayhive:
-    #image: ghcr.io/displayhive/displayhive:latest
-    build: .
+    image: ghcr.io/displayhive/displayhive:latest
+    #build: .
     container_name: displayhive
     restart: unless-stopped
     depends_on:
