@@ -17,6 +17,7 @@ import TabPanel from 'primevue/tabpanel'
 import ContentTable from '../components/ContentTable.vue'
 import ContentEditor from '../components/ContentEditor.vue'
 import MoveContentDialog from '../components/MoveContentDialog.vue'
+import { useRightsStore } from '../stores/rights'
 
 interface Container {
   id?: number
@@ -113,6 +114,8 @@ const filteredContentByContainer = computed<Record<string, ContentElement[]>>(()
 const toast = useToast()
 const confirm = useConfirm()
 const { on, off, emit, emitWithAck } = useSocket()
+const rightsStore = useRightsStore()
+const canCreate = computed(() => rightsStore.can('content.create'))
 
 const activeTab = ref('0')
 
@@ -451,7 +454,17 @@ const copyContent = (content: ContentElement) => {
 </script>
 
 <template>
-  <div class="content-view">
+  <div v-if="rightsStore.loaded && !rightsStore.can('content.page')" class="content-view">
+    <Card>
+      <template #content>
+        <div class="empty-state">
+          <i class="pi pi-lock" style="font-size: 3rem"></i>
+          <p>You don't have access to the Content page.</p>
+        </div>
+      </template>
+    </Card>
+  </div>
+  <div v-else class="content-view">
     <Card>
       <template #title>
         <div class="card-header">
@@ -497,6 +510,7 @@ const copyContent = (content: ContentElement) => {
                     <Tag :value="`${(filteredScreenbasedByContainer[container.name] || []).length} items`" />
                   </div>
                   <Button
+                    v-if="canCreate"
                     icon="pi pi-plus"
                     label="Add"
                     @click="openCreateWorkflowForScreen(container)"
@@ -558,6 +572,7 @@ const copyContent = (content: ContentElement) => {
                     <Tag :value="`${getContentForContainer(container.name).length} items`" />
                   </div>
                   <Button
+                    v-if="canCreate"
                     icon="pi pi-plus"
                     label="Add"
                     @click="openCreateWorkflow(container)"

@@ -4,6 +4,7 @@ import { useSocket } from '../composables/useSocket'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
 import { useMediaStore } from '../stores/media'
+import { useRightsStore } from '../stores/rights'
 import type { MediaItem } from '../types/models'
 
 // PrimeVue components
@@ -18,6 +19,13 @@ const toast = useToast()
 const confirm = useConfirm()
 const { emitWithAck } = useSocket()
 const mediaStore = useMediaStore()
+const rightsStore = useRightsStore()
+
+const canUpload = computed(() => rightsStore.can('media.upload'))
+const canDelete = computed(() => rightsStore.can('media.delete'))
+const canRename = computed(() => rightsStore.can('media.rename'))
+const canTag = computed(() => rightsStore.can('media.tag'))
+const canEdit = computed(() => canRename.value || canTag.value)
 
 const selectedFolder = ref<string>('')
 const filterText = ref('')
@@ -53,10 +61,12 @@ const editAvailableTags = computed(() => {
 })
 
 const editRemoveTag = (tag: string) => {
+  if (!canTag.value) return
   editTags.value = editTags.value.filter((t) => t !== tag)
 }
 
 const editAddTag = (tag: string) => {
+  if (!canTag.value) return
   const trimmed = tag.trim()
   if (!trimmed || editAssignedSet.value.has(trimmed.toLowerCase())) return
   editTags.value.push(trimmed)
@@ -235,14 +245,24 @@ const copyUrl = (url: string) => {
 </script>
 
 <template>
-  <div class="media-view">
+  <div v-if="rightsStore.loaded && !rightsStore.can('media.page')" class="media-view">
+    <Card>
+      <template #content>
+        <div class="empty-state">
+          <i class="pi pi-lock" style="font-size: 3rem"></i>
+          <p>You don't have access to the Media page.</p>
+        </div>
+      </template>
+    </Card>
+  </div>
+  <div v-else class="media-view">
     <div class="media-content">
       <Card>
         <template #title>
           <div class="card-header">
             <span>Media Library</span>
             <div class="header-actions">
-              <Button icon="pi pi-upload" label="Upload" @click="showUploadDialog = true" size="small" />
+              <Button v-if="canUpload" icon="pi pi-upload" label="Upload" @click="showUploadDialog = true" size="small" />
               <Button icon="pi pi-refresh" @click="mediaStore.fetch()" size="small" outlined />
             </div>
           </div>
@@ -300,8 +320,8 @@ const copyUrl = (url: string) => {
                 </div>
               </div>
               <div class="media-actions">
-                <Button icon="pi pi-pencil" @click="openEditDialog(item)" size="small" outlined title="Edit" />
-                <Button icon="pi pi-trash" @click="deleteMedia(item)" size="small" severity="danger" outlined title="Delete" />
+                <Button v-if="canEdit" icon="pi pi-pencil" @click="openEditDialog(item)" size="small" outlined title="Edit" />
+                <Button v-if="canDelete" icon="pi pi-trash" @click="deleteMedia(item)" size="small" severity="danger" outlined title="Delete" />
               </div>
             </div>
           </div>
@@ -349,7 +369,7 @@ const copyUrl = (url: string) => {
         <!-- Title field -->
         <div class="field">
           <label for="media-title">Title</label>
-          <InputText id="media-title" v-model="editForm.title" class="w-full" />
+          <InputText id="media-title" v-model="editForm.title" class="w-full" :disabled="!canRename" />
         </div>
 
         <!-- Tag clouds -->
@@ -382,12 +402,13 @@ const copyUrl = (url: string) => {
                 v-model="newTagInput"
                 placeholder="New tag… press Enter"
                 class="new-tag-input"
+                :disabled="!canTag"
                 @keydown="editNewTagKeydown"
               />
               <Button
                 icon="pi pi-plus"
                 size="small"
-                :disabled="!newTagInput.trim()"
+                :disabled="!canTag || !newTagInput.trim()"
                 @click="() => { editAddTag(newTagInput); newTagInput = '' }"
               />
             </div>

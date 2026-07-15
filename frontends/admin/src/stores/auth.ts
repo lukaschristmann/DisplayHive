@@ -4,6 +4,10 @@ import { useSocket } from '../composables/useSocket'
 
 const TOKEN_STORAGE_KEY = 'displayhive_admin_token'
 const USERNAME_STORAGE_KEY = 'displayhive_admin_username'
+// Set only while impersonating: the admin's own token/username, stashed so
+// "stop impersonating" can restore it without a fresh login.
+const ORIGINAL_TOKEN_STORAGE_KEY = 'displayhive_admin_original_token'
+const ORIGINAL_USERNAME_STORAGE_KEY = 'displayhive_admin_original_username'
 
 /**
  * Decode a JWT's `exp` claim (seconds since epoch) without verifying the
@@ -44,6 +48,10 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAuthenticated = computed(() => !!token.value)
 
+  const originalToken = ref<string | null>(localStorage.getItem(ORIGINAL_TOKEN_STORAGE_KEY))
+  const originalUsername = ref<string | null>(localStorage.getItem(ORIGINAL_USERNAME_STORAGE_KEY))
+  const isImpersonating = computed(() => !!originalToken.value)
+
   let expiryTimer: ReturnType<typeof setTimeout> | null = null
 
   const clearExpiryTimer = () => {
@@ -76,12 +84,57 @@ export const useAuthStore = defineStore('auth', () => {
     scheduleExpiry(newToken)
   }
 
+  const clearOriginalSession = () => {
+    originalToken.value = null
+    originalUsername.value = null
+    localStorage.removeItem(ORIGINAL_TOKEN_STORAGE_KEY)
+    localStorage.removeItem(ORIGINAL_USERNAME_STORAGE_KEY)
+  }
+
   const clearSession = () => {
     token.value = null
     username.value = null
     localStorage.removeItem(TOKEN_STORAGE_KEY)
     localStorage.removeItem(USERNAME_STORAGE_KEY)
     clearExpiryTimer()
+    // A full logout always ends any impersonation too — there is no "original"
+    // session left to fall back to once the whole thing is logged out.
+    clearOriginalSession()
+  }
+
+  /**
+   * Switch the active session to *newToken* (an impersonation token returned by
+   * displayhive:admin:users:cts:impersonate), stashing the admin's own
+   * session so stopImpersonation() can restore it. No-op if already
+   * impersonating — the backend refuses to chain impersonation anyway.
+   *
+   * Forces a full page reload rather than just reconnecting the socket: every
+   * Pinia store (media, devices, content, ...) holds data fetched under the
+   * *previous* identity's rights, and a plain reconnect wouldn't necessarily
+   * re-fetch all of it. A reload guarantees every store starts clean and
+   * re-fetches under the new session's rights.
+   */
+  const startImpersonation = (newToken: string, newUsername: string) => {
+    if (isImpersonating.value || !token.value || !username.value) return
+    originalToken.value = token.value
+    originalUsername.value = username.value
+    localStorage.setItem(ORIGINAL_TOKEN_STORAGE_KEY, token.value)
+    localStorage.setItem(ORIGINAL_USERNAME_STORAGE_KEY, username.value)
+    setSession(newToken, newUsername)
+    window.location.reload()
+  }
+
+  /**
+   * Fall back from an impersonated session to the admin's own original session.
+   * Also forces a full reload — see startImpersonation() for why.
+   */
+  const stopImpersonation = () => {
+    if (!isImpersonating.value || !originalToken.value || !originalUsername.value) return
+    const restoreToken = originalToken.value
+    const restoreUsername = originalUsername.value
+    clearOriginalSession()
+    setSession(restoreToken, restoreUsername)
+    window.location.reload()
   }
 
   /**
@@ -150,8 +203,23 @@ export const useAuthStore = defineStore('auth', () => {
   // logout() below disconnects this tab's socket; a fresh login elsewhere
   // flips `isAuthenticated`, which App.vue's watcher picks up to connect().
   window.addEventListener('storage', (event) => {
+    if (event.key === ORIGINAL_TOKEN_STORAGE_KEY) {
+      originalToken.value = event.newValue
+      originalUsername.value = event.newValue ? localStorage.getItem(ORIGINAL_USERNAME_STORAGE_KEY) : null
+      return
+    }
     if (event.key !== TOKEN_STORAGE_KEY) return
     if (event.newValue) {
+      const wasAuthenticated = !!token.value
+      // A plain login-while-logged-out is picked up by App.vue's isAuthenticated
+      // watcher, which calls connect(). A token swap on an *already*
+      // authenticated tab (e.g. another tab started/stopped impersonation)
+      // needs a full reload instead — see startImpersonation() for why a
+      // reconnect alone isn't enough to refresh every store's data.
+      if (wasAuthenticated) {
+        window.location.reload()
+        return
+      }
       token.value = event.newValue
       username.value = localStorage.getItem(USERNAME_STORAGE_KEY)
       scheduleExpiry(event.newValue)
@@ -169,6 +237,10 @@ export const useAuthStore = defineStore('auth', () => {
     username,
     restoring,
     isAuthenticated,
+    originalUsername,
+    isImpersonating,
+    startImpersonation,
+    stopImpersonation,
     login,
     logout,
     restore,

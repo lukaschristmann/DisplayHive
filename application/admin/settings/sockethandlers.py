@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 def register_admin_settings_handlers(socketio, app, db):
     """Register socket handlers for the admin Settings page."""
-    from application.socketio_handlers.auth import admin_handler
+    from application.socketio_handlers.auth import require_right
 
     # Keys the generic settings endpoint is allowed to write. Anything else
     # (e.g. telegram_token) has its own dedicated, validated handler and must
@@ -46,12 +46,12 @@ def register_admin_settings_handlers(socketio, app, db):
         socketio.emit('displayhive:admin:stc:admin_settings', payload, room=sid or None)
 
     @socketio.on('displayhive:admin:cts:get_admin_settings')
-    @admin_handler
+    @require_right('settings.page')
     def get_admin_settings(message=None):
         _emit_settings(getattr(request, 'sid', None))
 
     @socketio.on('displayhive:admin:cts:set_default_template')
-    @admin_handler
+    @require_right('settings.edit')
     def handle_set_default_template(data):
         sid = getattr(request, 'sid', None)
         template_id = data.get('id') if data else None
@@ -80,7 +80,7 @@ def register_admin_settings_handlers(socketio, app, db):
         _emit_settings(sid)
 
     @socketio.on('displayhive:admin:cts:set_system_settings')
-    @admin_handler
+    @require_right('settings.edit')
     def handle_set_system_settings(data):
         """Upsert one or more system settings. data = {settings: {key: value, ...}}"""
         sid = getattr(request, 'sid', None)

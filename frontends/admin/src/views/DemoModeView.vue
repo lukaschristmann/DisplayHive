@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, computed } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
 import { useAuthStore } from '../stores/auth'
+import { useRightsStore } from '../stores/rights'
 
 import Card from 'primevue/card'
 import Button from 'primevue/button'
@@ -19,6 +20,8 @@ interface DemoPackage {
 const toast = useToast()
 const confirm = useConfirm()
 const authStore = useAuthStore()
+const rightsStore = useRightsStore()
+const canImport = computed(() => rightsStore.can('importexport.import'))
 
 const packages = ref<DemoPackage[]>([])
 const loading = ref(false)
@@ -82,7 +85,17 @@ const confirmImport = (pkg: DemoPackage) => {
 </script>
 
 <template>
-  <div class="demo-mode-view">
+  <div v-if="rightsStore.loaded && !rightsStore.can('importexport.page')" class="demo-mode-view">
+    <Card>
+      <template #content>
+        <div class="empty-state">
+          <i class="pi pi-lock" style="font-size: 3rem"></i>
+          <p>You don't have access to Demo Mode.</p>
+        </div>
+      </template>
+    </Card>
+  </div>
+  <div v-else class="demo-mode-view">
     <Message severity="warn" :closable="false" class="intro-message">
       Importing a demo package overwrites all existing content, screens, templates and media —
       everything except your user accounts.
@@ -104,6 +117,7 @@ const confirmImport = (pkg: DemoPackage) => {
         <template #content>
           <p class="description">{{ pkg.description }}</p>
           <Button
+            v-if="canImport"
             label="Import Demo"
             icon="pi pi-cloud-download"
             severity="danger"

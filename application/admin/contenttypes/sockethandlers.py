@@ -9,7 +9,8 @@ def register_admin_contenttypes_handlers(socketio, app, db):
     """Register socket handlers for the admin Contenttypes page."""
     from application.admin.contenttypes.helper import emit_contenttypes_update
     from application.admin.content.helper import rerender_content_element_for_contenttype
-    from application.socketio_handlers.auth import admin_handler
+    from application.socketio_handlers.auth import require_right, admin_handler, current_admin_user
+    from application.permissions import has_right
     from application.utils import push_content_list_to_all_screens
     from application.models import Contenttype, ContentContainer, TagConfig
 
@@ -101,6 +102,12 @@ def register_admin_contenttypes_handlers(socketio, app, db):
     @socketio.on('displayhive:admin:cts:get_contenttypes')
     @admin_handler
     def get_admin_contenttypes(message=None):
+        # Shared by the Content Types page (contenttypes.page) and the Content
+        # editor, which needs the full contenttype list to create/edit content
+        # elements (content.page) — either right is sufficient for this read.
+        user = current_admin_user()
+        if not (has_right(db, user, 'contenttypes.page') or has_right(db, user, 'content.page')):
+            return
         _emit_contenttypes(room=request.sid)
 
     def _serialize_contenttype_detail(ct):
@@ -139,6 +146,10 @@ def register_admin_contenttypes_handlers(socketio, app, db):
     @socketio.on('displayhive:admin:cts:get_contenttype')
     @admin_handler
     def get_contenttype(message=None):
+        # Same either-right rule as get_contenttypes above.
+        user = current_admin_user()
+        if not (has_right(db, user, 'contenttypes.page') or has_right(db, user, 'content.page')):
+            return
         if not message or not isinstance(message, dict):
             return
         ct_id = message.get('id') or message.get('contenttype_id')
@@ -151,7 +162,7 @@ def register_admin_contenttypes_handlers(socketio, app, db):
         socketio.emit('displayhive:admin:stc:contenttype_detail', payload, room=request.sid)
 
     @socketio.on('displayhive:admin:cts:update_contenttype')
-    @admin_handler
+    @require_right('contenttypes.edit')
     def handle_update_contenttype(data=None):
         if not data or not isinstance(data, dict):
             return {'ok': False, 'error': 'Invalid payload'}
@@ -193,7 +204,7 @@ def register_admin_contenttypes_handlers(socketio, app, db):
         return {'ok': True}
 
     @socketio.on('displayhive:admin:cts:create_contenttype')
-    @admin_handler
+    @require_right('contenttypes.create')
     def handle_create_contenttype(data=None):
         if not data or not isinstance(data, dict):
             return {'ok': False, 'error': 'Invalid payload'}
@@ -224,7 +235,7 @@ def register_admin_contenttypes_handlers(socketio, app, db):
         return {'ok': True}
 
     @socketio.on('displayhive:admin:cts:delete_contenttype')
-    @admin_handler
+    @require_right('contenttypes.delete')
     def handle_delete_contenttype(data=None):
         if not data or not isinstance(data, dict):
             return

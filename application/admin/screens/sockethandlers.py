@@ -10,7 +10,8 @@ logger = logging.getLogger(__name__)
 def register_admin_screens_handlers(socketio, app, db):
     """Register admin socket handlers related to Screens (admin UI: Monitore)."""
 
-    from application.socketio_handlers.auth import admin_handler, fields
+    from application.socketio_handlers.auth import require_right, fields, admin_handler, current_admin_user
+    from application.permissions import has_right
     from application.models import Screen, Device, Screengroup
     from application.admin.screens.helper import emit_admin_screen
 
@@ -33,7 +34,7 @@ def register_admin_screens_handlers(socketio, app, db):
         return sg
 
     @socketio.on('displayhive:screens:cts:create_screen')
-    @admin_handler
+    @require_right('screens.create')
     def handle_create_screen(data):
         """Create a new screen and a dedicated is_one_screen Screengroup for it."""
         logger.debug('create_screen data=%s', data)
@@ -67,7 +68,7 @@ def register_admin_screens_handlers(socketio, app, db):
         return {'success': True, 'screen_id': screen.id}
 
     @socketio.on('displayhive:screens:cts:delete_screen')
-    @admin_handler
+    @require_right('screens.delete')
     def handle_delete_screen(data):
         """Delete a screen and its dedicated is_one_screen Screengroup."""
         logger.debug('delete_screen data=%s', data)
@@ -96,11 +97,18 @@ def register_admin_screens_handlers(socketio, app, db):
     @socketio.on('displayhive:admin:cts:get_admin_screen')
     @admin_handler
     def handle_get_admin_screen(message=None):
-        """Emit the current admin screen list to the requesting client."""
+        """Emit the current admin screen list to the requesting client.
+
+        Either screens.page or device.page — see
+        application.admin.screens.helper._screens_access.
+        """
+        user = current_admin_user()
+        if not (has_right(db, user, 'screens.page') or has_right(db, user, 'device.page')):
+            return
         emit_admin_screen(socketio, app, db, room=request.sid)
 
     @socketio.on('displayhive:screens:cts:toggle_monitoring')
-    @admin_handler
+    @require_right('screens.monitor')
     def handle_toggle_monitoring(data):
         """Toggle online monitoring for a screen."""
         (screen_id,) = fields(data, 'screen_id')
@@ -119,7 +127,7 @@ def register_admin_screens_handlers(socketio, app, db):
         return {'success': True, 'monitoring_enabled': screen.monitoring_enabled}
 
     @socketio.on('displayhive:screens:cts:reset_screen_size')
-    @admin_handler
+    @require_right('screens.resize')
     def handle_reset_screen_size(data):
         """Reset a screen's resolution to the connected device's max recorded resolution."""
         (screen_id,) = fields(data, 'screen_id')
@@ -150,7 +158,7 @@ def register_admin_screens_handlers(socketio, app, db):
         return {'success': True}
 
     @socketio.on('displayhive:screens:cts:toggle_debug')
-    @admin_handler
+    @require_right('screens.debug')
     def handle_toggle_debug(data):
         """Persist the debug flag for a screen and push updated deviceconfig."""
         logger.debug('toggle_debug data=%s', data)

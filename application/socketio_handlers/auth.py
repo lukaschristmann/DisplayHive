@@ -61,6 +61,97 @@ def require_admin() -> bool:
         return False
 
 
+def resolve_admin_user(sid: str):
+    """Return the still-valid AdminUser authenticated on socket *sid*, or None.
+
+    Unlike require_admin()/current_admin_user(), this takes an explicit sid
+    rather than reading it off the current request context, so it can be used
+    to resolve *other* connected admin sockets (e.g. when masking a broadcast
+    payload per-recipient — see application/admin/devices/helper.py).
+    """
+    token = _admin_sessions.get(sid)
+    if not token:
+        return None
+    try:
+        from flask import current_app
+        from application.models import db
+        from application.auth import user_from_token
+        return user_from_token(current_app._get_current_object(), db, token)
+    except Exception:
+        return None
+
+
+def current_admin_user():
+    """Return the AdminUser authenticated on the *current* request's socket, or None."""
+    try:
+        from flask import request
+        return resolve_admin_user(getattr(request, 'sid', None))
+    except Exception:
+        return None
+
+
+def is_impersonating() -> bool:
+    """True if the current socket authenticated with an impersonation token.
+
+    An impersonation token authenticates as the target user but carries a
+    signed 'imp' claim (see application.auth.create_token) recording who
+    actually started the session. Used to refuse chaining — an impersonated
+    session can't itself start another impersonation, even if the target
+    user happens to also hold special.impersonate.
+    """
+    try:
+        from flask import request, current_app
+        sid = getattr(request, 'sid', None)
+        token = _admin_sessions.get(sid)
+        if not token:
+            return False
+        from application.auth import decode_token
+        payload = decode_token(current_app._get_current_object(), token)
+        return bool(payload and payload.get('imp') is not None)
+    except Exception:
+        return False
+
+
+def require_right(right_key: str):
+    """Decorator factory: admin-only Socket.IO handler that also requires *right_key*.
+
+    Combines admin_handler's authentication + exception-safety with a
+    permission check (application.permissions.has_right). Denies (silently,
+    matching admin_handler's convention) if the caller is not a valid admin
+    or lacks the right — this is the actual security boundary; any
+    frontend-side hiding of buttons/pages is UX only and must not be relied on.
+
+    Usage:
+        @socketio.on('displayhive:media:cts:upload')
+        @require_right('media.upload')
+        def handle_upload(data): ...
+
+    Note this replaces @admin_handler (do not stack both).
+    """
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            if not require_admin():
+                return None
+            try:
+                from application.models import db
+                from application.permissions import has_right
+                user = current_admin_user()
+                if not has_right(db, user, right_key):
+                    return None
+                return fn(*args, **kwargs)
+            except Exception:
+                logger.exception("Unhandled error in admin handler %s", fn.__name__)
+                try:
+                    from application.models import db
+                    db.session.rollback()
+                except Exception:
+                    pass
+                return None
+        return wrapper
+    return decorator
+
+
 def admin_handler(fn):
     """Decorator for admin-only Socket.IO handlers.
 

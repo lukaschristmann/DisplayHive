@@ -4,8 +4,49 @@ from datetime import datetime as _dt, timezone as _tz
 
 logger = logging.getLogger(__name__)
 
+_EVENT = 'displayhive:admin:stc:upd_admin_screen'
+
+
+def _screens_access(db, sid):
+    """Return (may_see_list, may_see_devicekeys) for the socket at *sid*.
+
+    The screen list itself is either-right: screens.page is the obvious
+    owner, but the Devices page (device.page) also needs it to populate the
+    "assign to screen" pickers — withholding it there would leave those
+    dropdowns permanently empty for a device-only account. devicekey
+    (embedded per-screen as attached_device.devicekey) is independently
+    gated by device.showkey, same as the Devices page list.
+    """
+    from application.socketio_handlers.auth import resolve_admin_user
+    from application.permissions import has_right
+    user = resolve_admin_user(sid)
+    may_see_list = has_right(db, user, 'screens.page') or has_right(db, user, 'device.page')
+    may_see_devicekeys = has_right(db, user, 'device.showkey')
+    return may_see_list, may_see_devicekeys
+
+
+def _masked_screens(screens_data, may_see_devicekeys):
+    if may_see_devicekeys:
+        return screens_data
+    masked = []
+    for s in screens_data:
+        s = dict(s)
+        if s.get('attached_device'):
+            s['attached_device'] = {**s['attached_device'], 'devicekey': None}
+        masked.append(s)
+    return masked
+
+
 def emit_admin_screen(socketio, app, db, room=None):
-    """Build and emit the `upd_admin_screen` payload."""
+    """Build and emit the `upd_admin_screen` payload.
+
+    Like emit_devices_update / emit_screengroups_update, this is a proactive
+    server push (on connect, and after most screen/device mutations) rather
+    than only a response to an explicit request, so it needs its own access
+    check per recipient instead of relying on the read handler's
+    @require_right to have gated it. Falls back to the previous unconditional
+    behavior if per-socket enumeration is ever unavailable.
+    """
     # Use the Device DB `is_online` flag as the single source of truth for
     # whether a screen is considered online. Avoid relying on in-memory
     # connection state so the admin UI is authoritative and consistent.
@@ -70,9 +111,24 @@ def emit_admin_screen(socketio, app, db, room=None):
                 'template_id': entry.template_id,
             })
 
-        # Emit both legacy and namespaced events for compatibility
-        logger.debug("Emitting upd_admin_screen with %s screens to %s", len(screens_data), 'room ' + room if room else 'all clients')
-        if room:
-            socketio.emit('displayhive:admin:stc:upd_admin_screen', {'data': screens_data}, room=room)
-        else:
-            socketio.emit('displayhive:admin:stc:upd_admin_screen', {'data': screens_data})
+        logger.debug("Emitting upd_admin_screen with %s screens to %s", len(screens_data), room or 'admins')
+
+        if room and room != 'admins':
+            may_see_list, may_see_devicekeys = _screens_access(db, room)
+            if may_see_list:
+                socketio.emit(_EVENT, {'data': _masked_screens(screens_data, may_see_devicekeys)}, room=room)
+            return
+
+        try:
+            participants = list(socketio.server.manager.get_participants('/', 'admins'))
+        except Exception:
+            participants = None
+
+        if not participants:
+            socketio.emit(_EVENT, {'data': screens_data}, room='admins')
+            return
+
+        for sid, _eio_sid in participants:
+            may_see_list, may_see_devicekeys = _screens_access(db, sid)
+            if may_see_list:
+                socketio.emit(_EVENT, {'data': _masked_screens(screens_data, may_see_devicekeys)}, room=sid)

@@ -5,6 +5,7 @@ from .content import ContentElement, Template, Contenttype, ContentContainer, Ta
 from .screen import Screen, Screengroup, ScreenLog
 from .device import Device
 from .user import AdminUser
+from .rights import RightDefinition, Group, GroupRight, UserGroup, UserRight
 
 __all__ = [
     'db',
@@ -29,4 +30,9 @@ __all__ = [
     'ScreenLog',
     'Device',
     'AdminUser',
+    'RightDefinition',
+    'Group',
+    'GroupRight',
+    'UserGroup',
+    'UserRight',
 ]

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useSocket } from '../composables/useSocket'
 import { useToast } from 'primevue/usetoast'
+import { useRightsStore } from '../stores/rights'
 
 import Card from 'primevue/card'
 import Button from 'primevue/button'
@@ -12,6 +13,9 @@ import ToggleSwitch from 'primevue/toggleswitch'
 
 const { on, off, emit, emitWithAck } = useSocket()
 const toast = useToast()
+const rightsStore = useRightsStore()
+
+const canEdit = computed(() => rightsStore.can('settings.edit'))
 
 const loading = ref(true)
 const saving = ref(false)
@@ -97,6 +101,7 @@ onUnmounted(() => {
 })
 
 const saveDashboardSettings = async () => {
+  if (!canEdit.value) return
   saving.value = true
   try {
     const ack = await emitWithAck<{ success: boolean; error?: string }>(
@@ -125,6 +130,7 @@ const saveDashboardSettings = async () => {
 }
 
 const saveTimeSettings = async () => {
+  if (!canEdit.value) return
   timeSaving.value = true
   try {
     const ack = await emitWithAck<{ success: boolean; error?: string }>(
@@ -145,7 +151,17 @@ const saveTimeSettings = async () => {
 </script>
 
 <template>
-  <div class="settings-view">
+  <div v-if="rightsStore.loaded && !rightsStore.can('settings.page')" class="settings-view">
+    <Card>
+      <template #content>
+        <div class="empty-state">
+          <i class="pi pi-lock" style="font-size: 3rem"></i>
+          <p>You don't have access to the Settings page.</p>
+        </div>
+      </template>
+    </Card>
+  </div>
+  <div v-else class="settings-view">
 
     <div v-if="loading" class="loading-state">
       <i class="pi pi-spin pi-spinner" style="font-size: 2rem"></i>
@@ -164,6 +180,7 @@ const saveTimeSettings = async () => {
                 v-model="welcomeHeadline"
                 class="w-full"
                 placeholder="Welcome to DisplayHive Admin"
+                :disabled="!canEdit"
               />
             </div>
             <div class="field">
@@ -175,26 +192,28 @@ const saveTimeSettings = async () => {
                 rows="3"
                 autoResize
                 placeholder="Use the navigation menu to manage your digital signage system."
+                :disabled="!canEdit"
               />
             </div>
             <div class="field toggle-field">
               <label for="hide-community-links">Hide community links</label>
-              <ToggleSwitch id="hide-community-links" v-model="hideCommunityLinks" />
+              <ToggleSwitch id="hide-community-links" v-model="hideCommunityLinks" :disabled="!canEdit" />
             </div>
             <div class="field toggle-field">
               <label for="hide-helping-hand">Hide "Where a helping hand goes a long way" section</label>
-              <ToggleSwitch id="hide-helping-hand" v-model="hideHelpingHand" />
+              <ToggleSwitch id="hide-helping-hand" v-model="hideHelpingHand" :disabled="!canEdit" />
             </div>
             <div class="field toggle-field">
               <label for="hide-powered-by">Hide "powered by DisplayHive" badge on screens</label>
-              <ToggleSwitch id="hide-powered-by" v-model="hidePoweredBy" />
+              <ToggleSwitch id="hide-powered-by" v-model="hidePoweredBy" :disabled="!canEdit" />
             </div>
             <div class="field toggle-field">
               <label for="hide-demo-mode">Hide Demo Mode (removes it from the top bar and blocks the API)</label>
-              <ToggleSwitch id="hide-demo-mode" v-model="hideDemoMode" />
+              <ToggleSwitch id="hide-demo-mode" v-model="hideDemoMode" :disabled="!canEdit" />
             </div>
             <div class="field-actions">
               <Button
+                v-if="canEdit"
                 label="Save"
                 icon="pi pi-check"
                 :loading="saving"
@@ -229,6 +248,7 @@ const saveTimeSettings = async () => {
                 filter
                 class="w-full"
                 placeholder="Select timezone"
+                :disabled="!canEdit"
               />
             </div>
             <div class="field">
@@ -242,6 +262,7 @@ const saveTimeSettings = async () => {
             </div>
             <div class="field-actions">
               <Button
+                v-if="canEdit"
                 label="Save"
                 icon="pi pi-check"
                 :loading="timeSaving"

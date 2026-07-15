@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useSocket } from '../composables/useSocket'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
+import { useRightsStore } from '../stores/rights'
 import Card from 'primevue/card'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
@@ -29,6 +30,8 @@ interface PretalxUrl {
 const { on, off, emit, emitWithAck } = useSocket()
 const toast = useToast()
 const confirm = useConfirm()
+const rightsStore = useRightsStore()
+const canManage = computed(() => rightsStore.can('pretalx.manage'))
 
 const urls = ref<PretalxUrl[]>([])
 const now = ref(Date.now())
@@ -351,13 +354,23 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="pretalx-view">
+  <div v-if="rightsStore.loaded && !rightsStore.can('pretalx.page')" class="pretalx-view">
+    <Card>
+      <template #content>
+        <div class="empty-state">
+          <i class="pi pi-lock" style="font-size: 3rem"></i>
+          <p>You don't have access to the Pretalx page.</p>
+        </div>
+      </template>
+    </Card>
+  </div>
+  <div v-else class="pretalx-view">
     <Card>
       <template #title>
         <div class="card-header">
           <i class="pi pi-calendar" />
           <span>Pretalx API Endpoints</span>
-          <Button label="Add URL" icon="pi pi-plus" size="small" class="add-btn" @click="openAddDialog" />
+          <Button v-if="canManage" label="Add URL" icon="pi pi-plus" size="small" class="add-btn" @click="openAddDialog" />
         </div>
       </template>
       <template #content>
@@ -375,6 +388,7 @@ onUnmounted(() => {
             <template #body="{ data }">
               <ToggleSwitch
                 v-model="data.polling_enabled"
+                :disabled="!canManage"
                 @update:modelValue="(val) => onPollingToggle(data, val)"
               />
             </template>
@@ -410,6 +424,7 @@ onUnmounted(() => {
             <template #body="{ data }">
               <div class="row-actions">
                 <Button
+                  v-if="canManage"
                   icon="pi pi-pencil"
                   size="small"
                   outlined
@@ -427,6 +442,7 @@ onUnmounted(() => {
                   @click="viewCache(data)"
                 />
                 <Button
+                  v-if="canManage"
                   icon="pi pi-trash"
                   size="small"
                   outlined
@@ -519,18 +535,18 @@ onUnmounted(() => {
         <div class="settings-form">
           <div class="field">
             <label for="pretalx-no-session">No Session Running</label>
-            <InputText id="pretalx-no-session" v-model="pretalxNoSessionText" class="w-full" />
+            <InputText id="pretalx-no-session" v-model="pretalxNoSessionText" class="w-full" :disabled="!canManage" />
           </div>
           <div class="field">
             <label for="pretalx-coming-up">Coming Up Next</label>
-            <InputText id="pretalx-coming-up" v-model="pretalxComingUpText" class="w-full" />
+            <InputText id="pretalx-coming-up" v-model="pretalxComingUpText" class="w-full" :disabled="!canManage" />
           </div>
           <div class="field">
             <label for="pretalx-invalid-data">Invalid API Data</label>
-            <InputText id="pretalx-invalid-data" v-model="pretalxInvalidDataText" class="w-full" />
+            <InputText id="pretalx-invalid-data" v-model="pretalxInvalidDataText" class="w-full" :disabled="!canManage" />
           </div>
           <div class="field-actions">
-            <Button label="Save" icon="pi pi-check" :loading="textsSaving" @click="savePretalxTexts" />
+            <Button v-if="canManage" label="Save" icon="pi pi-check" :loading="textsSaving" @click="savePretalxTexts" />
           </div>
         </div>
       </template>
@@ -550,7 +566,7 @@ onUnmounted(() => {
           <div class="field">
             <label for="pretalx-time-format">Display Time Format</label>
             <div class="datetime-format-wrapper">
-              <InputText id="pretalx-time-format" v-model="pretalxTimeFormat" placeholder="HH:mm" class="w-full" />
+              <InputText id="pretalx-time-format" v-model="pretalxTimeFormat" placeholder="HH:mm" class="w-full" :disabled="!canManage" />
               <div class="datetime-preview">
                 <span class="datetime-preview-label">Preview</span>
                 <span class="datetime-preview-value">{{ formatDatePreview(pretalxTimeFormat) }}</span>
@@ -575,7 +591,7 @@ onUnmounted(() => {
           </div>
           <div class="field">
             <label for="pretalx-end-of-day">End of Day</label>
-            <InputText id="pretalx-end-of-day" v-model="pretalxEndOfDay" placeholder="23:59" class="w-full" />
+            <InputText id="pretalx-end-of-day" v-model="pretalxEndOfDay" placeholder="23:59" class="w-full" :disabled="!canManage" />
           </div>
           <div class="field">
             <label for="pretalx-sim-datetime">Simulation Datetime</label>
@@ -589,10 +605,11 @@ onUnmounted(() => {
               dateFormat="dd.mm.yy"
               placeholder="Use current time"
               class="w-full"
+              :disabled="!canManage"
             />
           </div>
           <div class="field-actions">
-            <Button label="Save" icon="pi pi-check" :loading="settingsSaving" @click="savePretalxSettings" />
+            <Button v-if="canManage" label="Save" icon="pi pi-check" :loading="settingsSaving" @click="savePretalxSettings" />
           </div>
         </div>
       </template>

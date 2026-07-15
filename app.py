@@ -18,8 +18,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 from flask_socketio import SocketIO
 from application.socketio_handlers import register_all_handlers
-from application.admin.auth.routes import register_auth_routes, require_jwt_auth
+from application.admin.auth.routes import register_auth_routes, require_jwt_auth, require_http_right
 from application.auth import ensure_bootstrap_admin
+from application.permissions import sync_right_definitions, ensure_superadmin_group
 
 # Import database models
 from application.models import db, Template, ContentContainer, Device
@@ -232,6 +233,8 @@ with app.app_context():
     _startup_step('enforce default template', _enforce_default_template)
     _startup_step('prune screen_log', _prune_screen_logs_startup)
     _startup_step('ensure bootstrap admin user', lambda: ensure_bootstrap_admin(app, db))
+    _startup_step('sync right definitions', lambda: sync_right_definitions(db))
+    _startup_step('ensure superadmin group', lambda: ensure_superadmin_group(db))
 
 # Register Socket.IO event handlers
 register_all_handlers(socketio, app, db)
@@ -457,6 +460,7 @@ def _restore_from_zip_bytes(raw: bytes) -> dict:
 
 @app.route('/admin/export/download')
 @require_jwt_auth(app)
+@require_http_right(app, 'importexport.export')
 def admin_export_download():
     """Build a ZIP archive containing db.json + all media files and stream it."""
     import io
@@ -488,6 +492,7 @@ def admin_export_download():
 
 @app.route('/admin/import/upload', methods=['POST'])
 @require_jwt_auth(app)
+@require_http_right(app, 'importexport.import')
 def admin_import_upload():
     """Accept a ZIP (or legacy JSON) upload and restore the database + media files."""
     import zipfile
@@ -522,6 +527,7 @@ def admin_import_upload():
 
 @app.route('/admin/demo/list')
 @require_jwt_auth(app)
+@require_http_right(app, 'importexport.page')
 def admin_demo_list():
     """List the available demo-content packages described in exampledesc.json."""
     if _demo_mode_hidden():
@@ -534,6 +540,7 @@ def admin_demo_list():
 
 @app.route('/admin/demo/import', methods=['POST'])
 @require_jwt_auth(app)
+@require_http_right(app, 'importexport.import')
 def admin_demo_import():
     """Wipe the database (except user accounts) and media, then import a bundled demo package."""
     import zipfile

@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 def register_admin_alerting_handlers(socketio, app, db):
     """Register socket handlers for the admin Alerting page."""
-    from application.socketio_handlers.auth import admin_handler
+    from application.socketio_handlers.auth import require_right
     from application.models import SystemSetting, TelegramUser, AlertSubscription
 
     def _get_setting(key):
@@ -54,7 +54,7 @@ def register_admin_alerting_handlers(socketio, app, db):
     # ── Settings ────────────────────────────────────────────────────────────
 
     @socketio.on('displayhive:admin:alerting:cts:get_settings')
-    @admin_handler
+    @require_right('alerting.page')
     def handle_get_alerting_settings(data=None):
         socketio.emit(
             'displayhive:admin:alerting:stc:settings',
@@ -63,7 +63,7 @@ def register_admin_alerting_handlers(socketio, app, db):
         )
 
     @socketio.on('displayhive:admin:alerting:cts:save_telegram_token')
-    @admin_handler
+    @require_right('alerting.showtoken')
     def handle_save_telegram_token(data=None):
         if not data or not isinstance(data, dict):
             return {'ok': False, 'error': 'Invalid payload'}
@@ -79,7 +79,7 @@ def register_admin_alerting_handlers(socketio, app, db):
     # ── Bot user discovery ───────────────────────────────────────────────────
 
     @socketio.on('displayhive:admin:alerting:cts:get_telegram_users_from_bot')
-    @admin_handler
+    @require_right('alerting.manage')
     def handle_get_telegram_users_from_bot(data=None):
         token = _get_token()
         if not token:
@@ -121,12 +121,12 @@ def register_admin_alerting_handlers(socketio, app, db):
     # ── Saved telegram users ─────────────────────────────────────────────────
 
     @socketio.on('displayhive:admin:alerting:cts:get_telegram_users')
-    @admin_handler
+    @require_right('alerting.page')
     def handle_get_telegram_users(data=None):
         _emit_telegram_users(request.sid)
 
     @socketio.on('displayhive:admin:alerting:cts:add_telegram_user')
-    @admin_handler
+    @require_right('alerting.manage')
     def handle_add_telegram_user(data=None):
         if not data or not isinstance(data, dict):
             return {'ok': False, 'error': 'Invalid payload'}
@@ -148,7 +148,7 @@ def register_admin_alerting_handlers(socketio, app, db):
         return {'ok': True}
 
     @socketio.on('displayhive:admin:alerting:cts:remove_telegram_user')
-    @admin_handler
+    @require_right('alerting.manage')
     def handle_remove_telegram_user(data=None):
         if not data or not isinstance(data, dict):
             return {'ok': False, 'error': 'Invalid payload'}
@@ -167,7 +167,7 @@ def register_admin_alerting_handlers(socketio, app, db):
         return {'ok': True}
 
     @socketio.on('displayhive:admin:alerting:cts:send_telegram_test')
-    @admin_handler
+    @require_right('alerting.manage')
     def handle_send_telegram_test(data=None):
         if not data or not isinstance(data, dict):
             return {'ok': False, 'error': 'Invalid payload'}
@@ -197,7 +197,7 @@ def register_admin_alerting_handlers(socketio, app, db):
     # ── Alert types & subscriptions ──────────────────────────────────────────
 
     @socketio.on('displayhive:admin:alerting:cts:get_alert_types')
-    @admin_handler
+    @require_right('alerting.page')
     def handle_get_alert_types(data=None):
         socketio.emit(
             'displayhive:admin:alerting:stc:alert_types',
@@ -206,12 +206,12 @@ def register_admin_alerting_handlers(socketio, app, db):
         )
 
     @socketio.on('displayhive:admin:alerting:cts:get_alert_subscriptions')
-    @admin_handler
+    @require_right('alerting.page')
     def handle_get_alert_subscriptions(data=None):
         _emit_subscriptions(request.sid)
 
     @socketio.on('displayhive:admin:alerting:cts:toggle_alert_subscription')
-    @admin_handler
+    @require_right('alerting.manage')
     def handle_toggle_alert_subscription(data=None):
         if not data or not isinstance(data, dict):
             return {'ok': False, 'error': 'Invalid payload'}

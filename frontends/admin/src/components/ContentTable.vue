@@ -7,6 +7,14 @@ import Tag from 'primevue/tag'
 import ToggleSwitch from 'primevue/toggleswitch'
 import InputNumber from 'primevue/inputnumber'
 import InputText from 'primevue/inputtext'
+import { useRightsStore } from '../stores/rights'
+
+const rightsStore = useRightsStore()
+const canEdit = computed(() => rightsStore.can('content.edit'))
+const canDelete = computed(() => rightsStore.can('content.delete'))
+const canMove = computed(() => rightsStore.can('content.move'))
+const canEnable = computed(() => rightsStore.can('content.enable'))
+const canCreate = computed(() => rightsStore.can('content.create'))
 
 interface ContentElement {
   id: number
@@ -213,7 +221,7 @@ const getContentFields = (content: any): ContentField[] => {
       <!-- Active -->
       <Column field="active" header="Active" style="width: 80px">
         <template #body="{ data }">
-          <ToggleSwitch v-model="data.active" @change="emit('toggleActive', data)" />
+          <ToggleSwitch v-model="data.active" :disabled="!canEnable" @change="emit('toggleActive', data)" />
         </template>
       </Column>
 
@@ -249,9 +257,10 @@ const getContentFields = (content: any): ContentField[] => {
       <Column header="Actions" style="width: 150px">
         <template #body="{ data }">
           <div class="action-buttons">
-            <Button icon="pi pi-pencil" @click="emit('edit', data)" size="small" outlined title="Edit" />
+            <Button v-if="canEdit" icon="pi pi-pencil" @click="emit('edit', data)" size="small" outlined title="Edit" />
             <Button icon="pi pi-eye" @click="emit('preview', data)" size="small" outlined title="Preview" />
             <Button
+              v-if="canMove"
               icon="pi pi-arrow-right"
               @click="emit('move', data)"
               size="small"
@@ -260,6 +269,7 @@ const getContentFields = (content: any): ContentField[] => {
               title="Move"
             />
             <Button
+              v-if="canCreate"
               icon="pi pi-copy"
               @click="emit('copy', data)"
               size="small"
@@ -267,6 +277,7 @@ const getContentFields = (content: any): ContentField[] => {
               title="Copy"
             />
             <Button
+              v-if="canDelete"
               icon="pi pi-trash"
               @click="emit('delete', data, containerName)"
               size="small"
@@ -286,6 +297,7 @@ const getContentFields = (content: any): ContentField[] => {
               <span class="expansion-label">Duration</span>
               <InputNumber
                 v-model="data.duration"
+                :disabled="!canEdit"
                 @blur="emit('updateDuration', data)"
                 :min="0"
                 :max="3600"
@@ -293,7 +305,7 @@ const getContentFields = (content: any): ContentField[] => {
                 buttonLayout="horizontal"
                 class="duration-input-inline"
               />
-              <div class="duration-presets">
+              <div v-if="canEdit" class="duration-presets">
                 <Button
                   v-for="val in [10, 20, 30]"
                   :key="val"

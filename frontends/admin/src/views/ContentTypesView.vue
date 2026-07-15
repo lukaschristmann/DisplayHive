@@ -4,6 +4,7 @@ import { useSocket } from '../composables/useSocket'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
 import { useMagicTagsStore } from '../stores/magicTags'
+import { useRightsStore } from '../stores/rights'
 
 // PrimeVue components
 import DataTable from 'primevue/datatable'
@@ -42,6 +43,12 @@ interface Container {
 const toast = useToast()
 const confirm = useConfirm()
 const { on, off, emit, emitWithAck } = useSocket()
+const rightsStore = useRightsStore()
+
+const canCreate = computed(() => rightsStore.can('contenttypes.create'))
+const canEdit = computed(() => rightsStore.can('contenttypes.edit'))
+const canDelete = computed(() => rightsStore.can('contenttypes.delete'))
+const canMagicTagsPage = computed(() => rightsStore.can('magictags.page'))
 
 const contentTypes = ref<ContentType[]>([])
 const containers = ref<Container[]>([])
@@ -450,13 +457,23 @@ const deleteContentType = (ct: ContentType) => {
 </script>
 
 <template>
-  <div class="contenttypes-view">
+  <div v-if="rightsStore.loaded && !rightsStore.can('contenttypes.page')" class="contenttypes-view">
+    <Card>
+      <template #content>
+        <div class="empty-state">
+          <i class="pi pi-lock" style="font-size: 3rem"></i>
+          <p>You don't have access to the Content Types page.</p>
+        </div>
+      </template>
+    </Card>
+  </div>
+  <div v-else class="contenttypes-view">
     <Card>
       <template #title>
         <div class="card-header">
           <span>Content Types</span>
           <div class="header-actions">
-            <Button icon="pi pi-plus" label="New Content Type" @click="openNewDialog" size="small" />
+            <Button v-if="canCreate" icon="pi pi-plus" label="New Content Type" @click="openNewDialog" size="small" />
             <Button icon="pi pi-refresh" @click="refreshData" size="small" outlined />
           </div>
         </div>
@@ -488,9 +505,9 @@ const deleteContentType = (ct: ContentType) => {
           <Column header="Actions" style="width: 150px">
             <template #body="{ data }">
               <div class="action-buttons">
-                <Button icon="pi pi-pencil" @click="openEditDialog(data)" size="small" outlined title="Edit" />
-                <Button icon="pi pi-copy" @click="openCopyDialog(data)" size="small" outlined title="Copy" />
-                <Button icon="pi pi-trash" @click="deleteContentType(data)" size="small" severity="danger" outlined title="Delete" />
+                <Button v-if="canEdit" icon="pi pi-pencil" @click="openEditDialog(data)" size="small" outlined title="Edit" />
+                <Button v-if="canCreate" icon="pi pi-copy" @click="openCopyDialog(data)" size="small" outlined title="Copy" />
+                <Button v-if="canDelete" icon="pi pi-trash" @click="deleteContentType(data)" size="small" severity="danger" outlined title="Delete" />
               </div>
             </template>
           </Column>
@@ -568,7 +585,7 @@ const deleteContentType = (ct: ContentType) => {
             />
           </div>
         </div>
-        <div v-if="magicTagsStore.magicTags.length" class="var-tags-section">
+        <div v-if="canMagicTagsPage && magicTagsStore.magicTags.length" class="var-tags-section">
           <label>Magic Tags <small>(click or drag into editor)</small></label>
           <div class="var-chips">
             <span

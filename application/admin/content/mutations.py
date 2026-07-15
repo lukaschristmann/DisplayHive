@@ -16,7 +16,8 @@ logger = logging.getLogger(__name__)
 
 def register_content_mutation_handlers(socketio, app, db):
     """Register the mutating Content handlers (create/update/delete/move/preview)."""
-    from application.socketio_handlers.auth import admin_handler, fields
+    from application.socketio_handlers.auth import admin_handler, fields, require_right, current_admin_user
+    from application.permissions import has_right
 
     def _push_upd_content(content_id):
         """Best-effort incremental push of a single content element to screens."""
@@ -27,7 +28,7 @@ def register_content_mutation_handlers(socketio, app, db):
             logger.exception('Failed to send upd_content for %s', content_id)
 
     @socketio.on('displayhive:admin:cts:update_content_element_active')
-    @admin_handler
+    @require_right('content.enable')
     def update_content_element_active(message):
         """Update content_element active status. Returns ack dict for emitWithAck callers."""
         content_element_id, active = fields(message, 'content_element_id', 'active')
@@ -46,7 +47,7 @@ def register_content_mutation_handlers(socketio, app, db):
         return {'success': True}
 
     @socketio.on('displayhive:admin:cts:update_content_element_duration')
-    @admin_handler
+    @require_right('content.edit')
     def update_content_element_duration(message):
         """Update content_element duration"""
         content_element_id, duration = fields(message, 'content_element_id', 'duration')
@@ -85,7 +86,7 @@ def register_content_mutation_handlers(socketio, app, db):
         logger.info("Sent content_element %s to preview_admin in container '%s'", content_element_id, container)
 
     @socketio.on('displayhive:admin:cts:delete_content_element')
-    @admin_handler
+    @require_right('content.delete')
     def delete_content_element(message):
         """Delete a content_element entry"""
         (content_element_id,) = fields(message, 'content_element_id')
@@ -102,7 +103,7 @@ def register_content_mutation_handlers(socketio, app, db):
         logger.info('ContentElement %s deleted', content_element_id)
 
     @socketio.on('displayhive:admin:cts:move_content_element_container')
-    @admin_handler
+    @require_right('content.move')
     def move_content_element_container(message):
         """Move a content_element to another contentcontainer if allowed for its contenttype, or unassign if target is empty"""
         content_element_id, target = fields(message, 'content_element_id', 'target_container')
@@ -190,6 +191,13 @@ def register_content_mutation_handlers(socketio, app, db):
             """Return message[k] when set, otherwise *default*."""
             v = message.get(k)
             return v if v is not None else default
+
+        # This single handler covers both create and update, gated by separate
+        # rights: creating a new element needs content.create, editing an
+        # existing one needs content.edit.
+        required_right = 'content.edit' if message.get('id') else 'content.create'
+        if not has_right(db, current_admin_user(), required_right):
+            return {'success': False, 'error': 'Permission denied'}
 
         edit_id = get_val('id')
         contenttype_id = get_val('contenttype_id')

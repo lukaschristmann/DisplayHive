@@ -9,6 +9,7 @@ import { useScreensStore } from '../stores/screens'
 import { useScreengroupsStore } from '../stores/screengroups'
 import { useTemplatesStore } from '../stores/templates'
 import { useDevicesStore } from '../stores/devices'
+import { useRightsStore } from '../stores/rights'
 import type { Screen } from '../types/models'
 
 // PrimeVue components
@@ -29,6 +30,16 @@ const screensStore = useScreensStore()
 const screengroupsStore = useScreengroupsStore()
 const templatesStore = useTemplatesStore()
 const devicesStore = useDevicesStore()
+const rightsStore = useRightsStore()
+
+const canCreate = computed(() => rightsStore.can('screens.create'))
+const canEdit = computed(() => rightsStore.can('screens.edit'))
+const canDelete = computed(() => rightsStore.can('screens.delete'))
+const canMonitor = computed(() => rightsStore.can('screens.monitor'))
+const canResize = computed(() => rightsStore.can('screens.resize'))
+const canDebug = computed(() => rightsStore.can('screens.debug'))
+const canReload = computed(() => rightsStore.can('screens.reload'))
+const canReloadAll = computed(() => rightsStore.can('screens.reload_all'))
 
 const filterText = ref('')
 
@@ -212,19 +223,31 @@ const resetScreenSize = (screen: Screen) => {
 </script>
 
 <template>
-  <div class="screens-view">
+  <div v-if="rightsStore.loaded && !rightsStore.can('screens.page')" class="screens-view">
+    <Card>
+      <template #content>
+        <div class="empty-state">
+          <i class="pi pi-lock" style="font-size: 3rem"></i>
+          <p>You don't have access to the Screens page.</p>
+        </div>
+      </template>
+    </Card>
+  </div>
+  <div v-else class="screens-view">
     <Card>
       <template #title>
         <div class="card-header">
           <span>Screens (Monitore)</span>
           <div class="header-actions">
             <Button
+              v-if="canCreate"
               icon="pi pi-plus"
               label="Add Screen"
               @click="openCreateDialog"
               size="small"
             />
             <Button
+              v-if="canReloadAll"
               icon="pi pi-refresh"
               label="Reload All"
               @click="reloadAllScreens"
@@ -302,7 +325,7 @@ const resetScreenSize = (screen: Screen) => {
             <template #body="{ data }">
               <span class="name-cell">
                 <i
-                  v-if="isWindowed(data)"
+                  v-if="isWindowed(data) && canResize"
                   class="pi pi-exclamation-triangle not-maximized-icon"
                   title="Screen not maximized - Click to reset Screensize"
                   @click.stop="resetScreenSize(data)"
@@ -321,6 +344,7 @@ const resetScreenSize = (screen: Screen) => {
             <template #body="{ data }">
               <div class="action-buttons">
                 <Button
+                  v-if="canEdit"
                   icon="pi pi-pencil"
                   @click="openRenameDialog(data)"
                   size="small"
@@ -328,6 +352,7 @@ const resetScreenSize = (screen: Screen) => {
                   title="Rename"
                 />
                 <Button
+                  v-if="canReload"
                   icon="pi pi-refresh"
                   @click="reloadScreen(data)"
                   size="small"
@@ -344,6 +369,7 @@ const resetScreenSize = (screen: Screen) => {
                   title="Locate Device"
                 />
                 <Button
+                  v-if="canDebug"
                   icon="pi pi-wrench"
                   @click="toggleDebug(data)"
                   size="small"
@@ -352,6 +378,7 @@ const resetScreenSize = (screen: Screen) => {
                   title="Toggle Debug"
                 />
                 <Button
+                  v-if="canMonitor"
                   :icon="data.monitoring_enabled !== false ? 'pi pi-eye' : 'pi pi-eye-slash'"
                   @click="toggleMonitoring(data)"
                   size="small"
@@ -360,6 +387,7 @@ const resetScreenSize = (screen: Screen) => {
                   :title="data.monitoring_enabled !== false ? 'Disable online monitoring' : 'Enable online monitoring'"
                 />
                 <Button
+                  v-if="canDelete"
                   icon="pi pi-trash"
                   @click="deleteScreen(data)"
                   size="small"

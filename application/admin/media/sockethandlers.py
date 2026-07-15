@@ -28,7 +28,8 @@ def _is_within(base, target):
 def register_admin_media_handlers(socketio, app, db):
     """Register all media-related socket.io event handlers for admin media page."""
     from application.models.content import Media
-    from application.socketio_handlers.auth import admin_handler
+    from application.socketio_handlers.auth import admin_handler, require_right, current_admin_user
+    from application.permissions import has_right
 
     MEDIA_FOLDER = app.config.get('MEDIA_FOLDER', 'static/media')
     PREVIEW_FOLDER = app.config.get('PREVIEW_FOLDER', 'static/media_previews')
@@ -143,19 +144,19 @@ def register_admin_media_handlers(socketio, app, db):
         return folders
 
     @socketio.on('displayhive:media:cts:get_media')
-    @admin_handler
+    @require_right('media.page')
     def handle_get_media(data=None):
         """Namespaced: return structured media list to the requesting client."""
         emit('displayhive:media:stc:media_list', {'media': _build_media_list_payload()})
 
     @socketio.on('displayhive:media:cts:get_folders')
-    @admin_handler
+    @require_right('media.page')
     def handle_get_folders(data=None):
         """Namespaced: return folder list to the requesting client."""
         emit('displayhive:media:stc:folders_list', {'folders': _build_folders_payload()})
 
     @socketio.on('displayhive:media:cts:upload')
-    @admin_handler
+    @require_right('media.upload')
     def handle_upload(data):
         """Namespaced: upload a media file. Returns an ack dict to the caller."""
         file_data = data.get('file_data')  # base64 encoded
@@ -294,16 +295,25 @@ def register_admin_media_handlers(socketio, app, db):
     @socketio.on('displayhive:media:cts:update_media')
     @admin_handler
     def handle_update_media(data):
-        """Namespaced: update title/tags for a media item."""
+        """Namespaced: update title/tags for a media item.
+
+        Title and tags are gated by separate rights (media.rename /
+        media.tag), so each requested field is checked independently and
+        silently dropped (not the whole call rejected) if the caller lacks
+        the right for that specific field.
+        """
         data = data or {}
-        return _do_media_edit(
-            media_id=data.get('id'),
-            title=data.get('title'),
-            tags_raw=data.get('tags'),
-        )
+        user = current_admin_user()
+        title = data.get('title')
+        if title is not None and not has_right(db, user, 'media.rename'):
+            title = None
+        tags_raw = data.get('tags')
+        if tags_raw is not None and not has_right(db, user, 'media.tag'):
+            tags_raw = None
+        return _do_media_edit(media_id=data.get('id'), title=title, tags_raw=tags_raw)
 
     @socketio.on('displayhive:media:cts:delete_media')
-    @admin_handler
+    @require_right('media.delete')
     def handle_delete_media(data):
         """Namespaced: delete a media item."""
         data = data or {}
@@ -336,7 +346,7 @@ def register_admin_media_handlers(socketio, app, db):
         _push_media_list()
 
     @socketio.on('displayhive:media:cts:folder_create')
-    @admin_handler
+    @require_right('media.upload')
     def media_folder_create(message):
         """Create new folder."""
         parent_folder = message.get('parent', '')
@@ -372,7 +382,7 @@ def register_admin_media_handlers(socketio, app, db):
         })
 
     @socketio.on('displayhive:media:cts:folder_delete')
-    @admin_handler
+    @require_right('media.delete')
     def media_folder_delete(message):
         """Delete folder and all contents."""
         folder_path = message.get('folder', '')
@@ -405,7 +415,7 @@ def register_admin_media_handlers(socketio, app, db):
         })
 
     @socketio.on('displayhive:media:cts:folder_rename')
-    @admin_handler
+    @require_right('media.rename')
     def media_folder_rename(message):
         """Rename folder."""
         old_path = message.get('old_path', '')

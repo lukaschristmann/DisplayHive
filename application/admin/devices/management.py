@@ -14,7 +14,8 @@ def register_device_management_handlers(socketio, app, db):
     from application.admin.devices.helper import emit_devices_update
     from flask import request
     from datetime import datetime, timezone
-    from application.socketio_handlers.auth import admin_handler
+    from application.socketio_handlers.auth import admin_handler, require_right, current_admin_user
+    from application.permissions import has_right
 
     def _assign_screen_to_device(device, screen):
         """Assign *screen* to *device*, un-assigning any other device currently on that screen.
@@ -70,7 +71,7 @@ def register_device_management_handlers(socketio, app, db):
             logger.exception('Error emitting screen list')
 
     @socketio.on('displayhive:devices:cts:get_devices')
-    @admin_handler
+    @require_right('device.page')
     def handle_get_devices(data=None):
         """Get all registered devices"""
         emit_devices_update(socketio, db, room=request.sid)
@@ -145,11 +146,20 @@ def register_device_management_handlers(socketio, app, db):
     @socketio.on('displayhive:devices:cts:update_device')
     @admin_handler
     def handle_update_device(data):
-        """Update device information"""
+        """Update device information.
+
+        'name' and 'is_active' are gated by separate rights (device.rename /
+        device.enable), so each requested field is checked independently and
+        silently dropped if the caller lacks the right for that field.
+        """
         from application.models import Device
 
         device_id = data.get('device_id')
+        user = current_admin_user()
         name = data.get('name')
+        if name is not None and not has_right(db, user, 'device.rename'):
+            name = None
+        allow_enable_change = has_right(db, user, 'device.enable')
 
         if not device_id:
             return {'success': False, 'error': 'No device_id provided'}
@@ -164,7 +174,7 @@ def register_device_management_handlers(socketio, app, db):
         was_active = bool(getattr(device, 'is_active', True))
         if name is not None:
             device.name = name
-        if 'is_active' in data:
+        if 'is_active' in data and allow_enable_change:
             try:
                 device.is_active = bool(data.get('is_active'))
             except Exception:
@@ -228,7 +238,7 @@ def register_device_management_handlers(socketio, app, db):
         return {'success': True}
 
     @socketio.on('displayhive:devices:cts:assign_device_screen')
-    @admin_handler
+    @require_right('device.assign')
     def handle_assign_device_screen(data):
         """Assign or unassign a screen from a device"""
         from application.models import Device, Screen
@@ -335,7 +345,7 @@ def register_device_management_handlers(socketio, app, db):
         return {'success': True, 'find': new_state}
 
     @socketio.on("displayhive:devices:cts:delete_device")
-    @admin_handler
+    @require_right('device.delete')
     def admin_handle_delete_device(data):
         """Handle admin-initiated device deletion.
 
@@ -369,7 +379,7 @@ def register_device_management_handlers(socketio, app, db):
         return {"success": True}
 
     @socketio.on("displayhive:devices:cts:approve_registration")
-    @admin_handler
+    @require_right('device.adopt')
     def admin_handle_approve_registration(data):
         """Approve a registration token and create a device (admin action).
 

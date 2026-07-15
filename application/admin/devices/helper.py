@@ -40,16 +40,51 @@ def get_registered_devices_handler(app, socketio, db):
     return devices_data
 
 
+def _masked(devices_data):
+    """Copy of *devices_data* with devicekey stripped (for callers without device.showkey)."""
+    return [{**d, 'devicekey': None} for d in devices_data]
+
+
+def _devices_payload_for_sid(devices_data, sid):
+    """Return the devices payload as *sid* is entitled to see it."""
+    from application.socketio_handlers.auth import resolve_admin_user
+    from application.models import db
+    from application.permissions import has_right
+    user = resolve_admin_user(sid)
+    if has_right(db, user, 'device.showkey'):
+        return devices_data
+    return _masked(devices_data)
+
+
 def emit_devices_update(socketio, db, room=None):
-    """Emit devices list update to clients."""
+    """Emit devices list update to clients.
+
+    devicekey is gated by the device.showkey right, and different recipients
+    in the 'admins' room may resolve that right differently, so a plain
+    room-wide broadcast can't share one payload — each admin socket gets its
+    own masked/unmasked copy. Falls back to a single unmasked broadcast (the
+    prior, pre-rights behavior) if per-socket enumeration is unavailable for
+    any reason, so a masking failure never breaks the live device list.
+    """
+    event = 'displayhive:devices:stc:devices_upd_devicelist'
     try:
         from flask import current_app
         devices_data = get_registered_devices_handler(current_app, socketio, db)
-        payload = {'devices': devices_data}
-        if room:
-            socketio.emit('displayhive:devices:stc:devices_upd_devicelist', payload, room=room)
-        else:
-            socketio.emit('displayhive:devices:stc:devices_upd_devicelist', payload, room='admins')
+
+        if room and room != 'admins':
+            socketio.emit(event, {'devices': _devices_payload_for_sid(devices_data, room)}, room=room)
+            return
+
+        try:
+            participants = list(socketio.server.manager.get_participants('/', 'admins'))
+        except Exception:
+            participants = None
+
+        if not participants:
+            socketio.emit(event, {'devices': devices_data}, room='admins')
+            return
+
+        for sid, _eio_sid in participants:
+            socketio.emit(event, {'devices': _devices_payload_for_sid(devices_data, sid)}, room=sid)
     except Exception:
         logger.exception('emit_devices_update failed')
-                 

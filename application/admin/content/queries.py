@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 def register_content_query_handlers(socketio, app, db):
     """Register the read-only Content handlers (pickers, listings, detail)."""
-    from application.socketio_handlers.auth import admin_handler
+    from application.socketio_handlers.auth import admin_handler, require_right, current_admin_user
 
     def _media_entry(m, *, include_filename=False, include_mimetype=False):
         """Build a media picker dict for a Media row."""
@@ -76,7 +76,7 @@ def register_content_query_handlers(socketio, app, db):
         socketio.emit('displayhive:admin:stc:images_by_tags', {'images': matched, 'tags': tags}, room=sid)
 
     @socketio.on('displayhive:admin:cts:get_containers')
-    @admin_handler
+    @require_right('content.page')
     def handle_get_containers(data=None):
         """Get all content containers from the default template."""
         sid = request.sid
@@ -86,7 +86,7 @@ def register_content_query_handlers(socketio, app, db):
         logger.debug('Sent %s containers to %s', len(containers), sid)
 
     @socketio.on('displayhive:admin:cts:get_containers_for_screen')
-    @admin_handler
+    @require_right('content.page')
     def handle_get_containers_for_screen(data=None):
         """Return content containers for a specific screen, using its assigned template.
 
@@ -190,7 +190,7 @@ def register_content_query_handlers(socketio, app, db):
         return content_list
 
     @socketio.on('displayhive:admin:cts:get_content_by_container')
-    @admin_handler
+    @require_right('content.page')
     def handle_get_content_by_container(data):
         """Get all content_element for a specific container."""
         container_name = data.get('container') if data else None
@@ -208,7 +208,7 @@ def register_content_query_handlers(socketio, app, db):
         logger.debug('Sent %s items for container %s', len(content_list), container_name)
 
     @socketio.on('displayhive:admin:cts:get_content_by_screengroup')
-    @admin_handler
+    @require_right('content.page')
     def handle_get_content_by_screengroup(data):
         """Get all content_element assigned to a specific screengroup (by screengroup id)."""
         raw_id = data.get('screengroup_id') if data else None
@@ -232,7 +232,7 @@ def register_content_query_handlers(socketio, app, db):
         logger.debug('Sent %s items for screengroup %s', len(content_list), screengroup_id)
 
     @socketio.on('displayhive:admin:cts:get_content_by_screengroup_and_container')
-    @admin_handler
+    @require_right('content.page')
     def handle_get_content_by_screengroup_and_container(data):
         """Get content_element for a specific screengroup filtered by container name."""
         raw_id = data.get('screengroup_id') if data else None
@@ -259,7 +259,7 @@ def register_content_query_handlers(socketio, app, db):
         logger.debug('Sent %s items for sg=%s container=%s', len(content_list), screengroup_id, container_name)
 
     @socketio.on('displayhive:admin:cts:get_content_element_detail')
-    @admin_handler
+    @require_right('content.page')
     def handle_get_content_element_detail(data):
         """Get detailed content data for editing, including all custom field values."""
         sid = request.sid
@@ -312,7 +312,7 @@ def register_content_query_handlers(socketio, app, db):
         logger.debug('Sent detail for content_element %s to %s', content_element_id, sid)
 
     @socketio.on('displayhive:admin:cts:get_unassigned_content')
-    @admin_handler
+    @require_right('content.page')
     def handle_get_unassigned_content(data=None):
         """Get all content that is unassigned.
 
@@ -360,9 +360,17 @@ def register_content_query_handlers(socketio, app, db):
     @socketio.on('displayhive:admin:cts:get_all_content_element')
     @admin_handler
     def handle_get_all_content_element(data=None):
-        """Return all ContentElement items regardless of container — used by the
-        screengroup modal to build the full 'available' list.
+        """Return all ContentElement items regardless of container.
+
+        Shared by two callers with different rights: the Content page itself
+        (content.page) and the screengroup "assign content" modal
+        (screengroups.manage_content). Either right is sufficient — this is
+        not a mutation, just a listing, so there's no reason to require both.
         """
+        from application.permissions import has_right
+        user = current_admin_user()
+        if not (has_right(db, user, 'content.page') or has_right(db, user, 'screengroups.manage_content')):
+            return
         sid = request.sid
         items = db.session.execute(
             db.select(ContentElement).order_by(ContentElement.title)

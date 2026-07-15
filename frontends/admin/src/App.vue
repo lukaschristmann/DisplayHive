@@ -6,6 +6,7 @@ import { RouterView, useRouter, useRoute } from 'vue-router'
 import { useSocket } from './composables/useSocket'
 import { useAuthStore } from './stores/auth'
 import { useSettingsStore } from './stores/settings'
+import { useRightsStore } from './stores/rights'
 import LoginView from './views/LoginView.vue'
 
 // PrimeVue components
@@ -21,6 +22,7 @@ const route = useRoute()
 const { connect, isConnected, reconnectFailed, on } = useSocket()
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
+const rightsStore = useRightsStore()
 
 on('connect_error', (err: unknown) => {
   const message = (err as { message?: string } | null)?.message
@@ -98,6 +100,7 @@ watch(isConnected, (connected) => {
     }
     hasEverConnected.value = true
     settingsStore.fetchSettings()
+    rightsStore.fetchMyRights()
   } else if (hasEverConnected.value) {
     // Only reload on reconnect if the disconnect lasts longer than the grace
     // period — brief polling hiccups (~1 s) must not trigger a page reload.
@@ -127,6 +130,7 @@ watch(
       // next time the user connects (e.g. right after logging back in).
       hasEverConnected.value = false
       shouldReloadOnReconnect = false
+      rightsStore.reset()
       if (disconnectTimer !== null) {
         clearTimeout(disconnectTimer)
         disconnectTimer = null
@@ -151,103 +155,171 @@ onMounted(async () => {
   }
 })
 
+const contentMenuItems = computed(() => [
+  ...(rightsStore.can('content.page')
+    ? [
+        {
+          label: 'Content',
+          icon: 'pi pi-box',
+          command: () => router.push('/content'),
+        },
+      ]
+    : []),
+  ...(rightsStore.can('screens.page')
+    ? [
+        {
+          label: 'Screens',
+          icon: 'pi pi-window-maximize',
+          command: () => router.push('/screens'),
+        },
+      ]
+    : []),
+  ...(rightsStore.can('screengroups.page')
+    ? [
+        {
+          label: 'Screen Groups',
+          icon: 'pi pi-clone',
+          command: () => router.push('/screengroups'),
+        },
+      ]
+    : []),
+  ...(rightsStore.can('media.page')
+    ? [
+        {
+          label: 'Media',
+          icon: 'pi pi-images',
+          command: () => router.push('/media'),
+        },
+      ]
+    : []),
+])
+
+const adminMenuItems = computed(() => [
+  ...(rightsStore.can('device.page')
+    ? [
+        {
+          label: 'Devices',
+          icon: 'pi pi-desktop',
+          command: () => router.push('/devices'),
+        },
+      ]
+    : []),
+  ...(rightsStore.can('screens.page') && rightsStore.can('screengroups.page')
+    ? [
+        {
+          label: 'Matrix',
+          icon: 'pi pi-th-large',
+          command: () => router.push('/matrix'),
+        },
+      ]
+    : []),
+  ...(rightsStore.can('contenttypes.page')
+    ? [
+        {
+          label: 'Content Types',
+          icon: 'pi pi-file',
+          command: () => router.push('/contenttypes'),
+        },
+      ]
+    : []),
+  ...(rightsStore.can('templates.page')
+    ? [
+        {
+          label: 'Templates',
+          icon: 'pi pi-palette',
+          command: () => router.push('/templates'),
+        },
+      ]
+    : []),
+  ...(rightsStore.can('settings.page')
+    ? [
+        {
+          label: 'Settings',
+          icon: 'pi pi-cog',
+          command: () => router.push('/settings'),
+        },
+      ]
+    : []),
+  ...(rightsStore.can('alerting.page')
+    ? [
+        {
+          label: 'Alerting',
+          icon: 'pi pi-bell',
+          command: () => router.push('/alerting'),
+        },
+      ]
+    : []),
+  ...(rightsStore.can('logger.page')
+    ? [
+        {
+          label: 'Logger',
+          icon: 'pi pi-list',
+          command: () => router.push('/logger'),
+        },
+      ]
+    : []),
+  ...(rightsStore.can('importexport.page')
+    ? [
+        {
+          label: 'Im-/Export',
+          icon: 'pi pi-database',
+          command: () => router.push('/importexport'),
+        },
+      ]
+    : []),
+  ...(rightsStore.can('pretalx.page')
+    ? [
+        {
+          label: 'Pretalx',
+          icon: 'pi pi-calendar',
+          command: () => router.push('/pretalx'),
+        },
+      ]
+    : []),
+  ...(rightsStore.can('users.page') || rightsStore.can('rights.page')
+    ? [
+        {
+          label: 'Users & Rights',
+          icon: 'pi pi-users',
+          command: () => router.push('/users'),
+        },
+      ]
+    : []),
+])
+
 const menuItems = computed(() => [
   {
     label: 'Dashboard',
     icon: 'pi pi-home',
     command: () => router.push('/'),
   },
-  ...(settingsStore.hideDemoMode
-    ? []
-    : [
+  ...(!settingsStore.hideDemoMode && rightsStore.can('importexport.page')
+    ? [
         {
           label: 'Demo Mode',
           icon: 'pi pi-sparkles',
           command: () => router.push('/demo'),
         },
-      ]),
-  {
-    label: 'Content',
-    icon: 'pi pi-folder',
-    items: [
-      {
-        label: 'Content',
-        icon: 'pi pi-box',
-        command: () => router.push('/content'),
-      },
-      {
-        label: 'Screens',
-        icon: 'pi pi-window-maximize',
-        command: () => router.push('/screens'),
-      },
-      {
-        label: 'Screen Groups',
-        icon: 'pi pi-clone',
-        command: () => router.push('/screengroups'),
-      },
-      {
-        label: 'Media',
-        icon: 'pi pi-images',
-        command: () => router.push('/media'),
-      },
-    ],
-  },
-  {
-    label: 'Admin',
-    icon: 'pi pi-cog',
-    items: [
-      {
-        label: 'Devices',
-        icon: 'pi pi-desktop',
-        command: () => router.push('/devices'),
-      },
-      {
-        label: 'Matrix',
-        icon: 'pi pi-th-large',
-        command: () => router.push('/matrix'),
-      },
-      {
-        label: 'Content Types',
-        icon: 'pi pi-file',
-        command: () => router.push('/contenttypes'),
-      },
-      {
-        label: 'Templates',
-        icon: 'pi pi-palette',
-        command: () => router.push('/templates'),
-      },
-      {
-        label: 'Settings',
-        icon: 'pi pi-cog',
-        command: () => router.push('/settings'),
-      },
-      {
-        label: 'Alerting',
-        icon: 'pi pi-bell',
-        command: () => router.push('/alerting'),
-      },
-      {
-        label: 'Logger',
-        icon: 'pi pi-list',
-        command: () => router.push('/logger'),
-      },
-      {
-        label: 'Im-/Export',
-        icon: 'pi pi-database',
-        command: () => router.push('/importexport'),
-      },
-      {
-        label: 'Pretalx',
-        icon: 'pi pi-calendar',
-        command: () => router.push('/pretalx'),
-      },
-      {
-        label: 'Users',
-        icon: 'pi pi-users',
-        command: () => router.push('/users'),
-      },
-    ],
-  },
+      ]
+    : []),
+  ...(contentMenuItems.value.length
+    ? [
+        {
+          label: 'Content',
+          icon: 'pi pi-folder',
+          items: contentMenuItems.value,
+        },
+      ]
+    : []),
+  ...(adminMenuItems.value.length
+    ? [
+        {
+          label: 'Admin',
+          icon: 'pi pi-cog',
+          items: adminMenuItems.value,
+        },
+      ]
+    : []),
 ])
 
 const pageTitle = computed(() => {
@@ -267,7 +339,7 @@ const pageTitle = computed(() => {
     importexport: 'Im-/Export',
     alerting: 'Alerting',
     pretalx: 'Pretalx',
-    users: 'Users',
+    users: 'Users & Rights',
   }
   return titles[route.name as string] || 'DisplayHive Admin'
 })
@@ -284,6 +356,22 @@ const pageTitle = computed(() => {
     <LoginView v-else-if="!authStore.isAuthenticated" />
 
     <template v-else>
+      <div v-if="authStore.isImpersonating" class="impersonation-banner" data-testid="impersonation-banner">
+        <i class="pi pi-user-edit"></i>
+        <span>
+          You are impersonating <strong>{{ authStore.username }}</strong>
+          (originally logged in as <strong>{{ authStore.originalUsername }}</strong>).
+        </span>
+        <Button
+          label="Stop Impersonating"
+          icon="pi pi-sign-out"
+          size="small"
+          severity="warn"
+          data-testid="stop-impersonation-button"
+          @click="authStore.stopImpersonation()"
+        />
+      </div>
+
       <div v-if="securityWarnings.length" class="security-warnings">
         <div
           v-for="(warning, i) in securityWarnings"
@@ -319,9 +407,9 @@ const pageTitle = computed(() => {
             size="small"
             class="logout-button"
             data-testid="logout-button"
-            aria-label="Logout"
-            v-tooltip.bottom="'Logout'"
-            @click="authStore.logout()"
+            :aria-label="authStore.isImpersonating ? 'Stop impersonating' : 'Logout'"
+            v-tooltip.bottom="authStore.isImpersonating ? 'Stop impersonating' : 'Logout'"
+            @click="authStore.isImpersonating ? authStore.stopImpersonation() : authStore.logout()"
           />
         </div>
       </header>
@@ -398,6 +486,22 @@ body {
 
 .security-warning + .security-warning {
   border-top: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.impersonation-banner {
+  position: sticky;
+  top: 0;
+  z-index: 1002;
+  background: #facc15;
+  color: #1f2937;
+  padding: 0.5rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  flex-wrap: wrap;
 }
 
 .app-header {

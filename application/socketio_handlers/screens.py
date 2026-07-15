@@ -12,7 +12,8 @@ def register_screen_handlers(socketio, app, db):
 
     from application.models import Screen, Screengroup, Device
     from application.utils import emit_zuweisungen_matrix_update
-    from application.socketio_handlers.auth import admin_handler
+    from application.socketio_handlers.auth import admin_handler, require_right, current_admin_user
+    from application.permissions import has_right
     from flask import request
 
     def _reload_devices_on_screen(screen):
@@ -32,7 +33,7 @@ def register_screen_handlers(socketio, app, db):
         logger.info("Reload command sent to screen '%s'", screen.name)
 
     @socketio.on('displayhive:screens:cts:reload_screen')
-    @admin_handler
+    @require_right('screens.reload')
     def reload_screen(message):
         """Send a RELOAD command to all devices attached to the named screen."""
         screen_name = message.get('name', '').replace('?', '')
@@ -45,7 +46,7 @@ def register_screen_handlers(socketio, app, db):
             _reload_devices_on_screen(screen_obj)
 
     @socketio.on('displayhive:screens:cts:reload_all_screens')
-    @admin_handler
+    @require_right('screens.reload_all')
     def reload_all_screens(message):
         """Send a RELOAD command to devices on every screen."""
         screens = db.session.execute(db.select(Screen)).scalars().all()
@@ -56,7 +57,14 @@ def register_screen_handlers(socketio, app, db):
     @socketio.on('displayhive:screens:cts:get_screen_screengroups')
     @admin_handler
     def get_screen_screengroups(message):
-        """Fetch all screengroups and the current screen's assignments"""
+        """Fetch all screengroups and the current screen's assignments.
+
+        Feeds the screen edit dialog, so either screens.page or screens.edit
+        is sufficient (a plain read, not itself a mutation).
+        """
+        user = current_admin_user()
+        if not (has_right(db, user, 'screens.page') or has_right(db, user, 'screens.edit')):
+            return
         screen_id = message.get('screen_id')
 
         all_screengroups = db.session.execute(
@@ -76,7 +84,7 @@ def register_screen_handlers(socketio, app, db):
         }, room=request.sid)
 
     @socketio.on('displayhive:screens:cts:rename_screen')
-    @admin_handler
+    @require_right('screens.edit')
     def rename_screen(message):
         """Rename a screen and update its screengroups"""
         screen_id = message.get('id')

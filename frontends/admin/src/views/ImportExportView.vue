@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
 import { useAuthStore } from '../stores/auth'
+import { useRightsStore } from '../stores/rights'
 
 import Card from 'primevue/card'
 import Button from 'primevue/button'
@@ -12,12 +13,17 @@ import Message from 'primevue/message'
 const toast = useToast()
 const confirm = useConfirm()
 const authStore = useAuthStore()
+const rightsStore = useRightsStore()
+
+const canExport = computed(() => rightsStore.can('importexport.export'))
+const canImport = computed(() => rightsStore.can('importexport.import'))
 
 const exporting = ref(false)
 const importing = ref(false)
 const importResult = ref<{ success: boolean; error?: string; counts?: Record<string, number> } | null>(null)
 
 const triggerExport = async () => {
+  if (!canExport.value) return
   exporting.value = true
   try {
     const response = await fetch('/admin/export/download', { headers: authStore.authHeader() })
@@ -44,6 +50,7 @@ const triggerExport = async () => {
 const fileInput = ref<HTMLInputElement | null>(null)
 
 const triggerImport = () => {
+  if (!canImport.value) return
   confirm.require({
     message:
       'This will permanently DELETE all existing data and media files, then replace them with the contents of the selected file. Media files are deleted immediately and cannot be recovered even if the import fails. This cannot be undone. Continue?',
@@ -61,8 +68,8 @@ const triggerImport = () => {
 const onFileSelected = async (event: Event) => {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
-  if (!file) return
   input.value = ''
+  if (!file || !canImport.value) return
 
   importResult.value = null
   importing.value = true
@@ -92,7 +99,17 @@ const onFileSelected = async (event: Event) => {
 </script>
 
 <template>
-  <div class="importexport-view">
+  <div v-if="rightsStore.loaded && !rightsStore.can('importexport.page')" class="importexport-view">
+    <Card>
+      <template #content>
+        <div class="empty-state">
+          <i class="pi pi-lock" style="font-size: 3rem"></i>
+          <p>You don't have access to the Im-/Export page.</p>
+        </div>
+      </template>
+    </Card>
+  </div>
+  <div v-else class="importexport-view">
     <!-- Export -->
     <Card class="section-card">
       <template #title>
@@ -108,17 +125,19 @@ const onFileSelected = async (event: Event) => {
           snapshot) and a <code>media/</code> folder with the actual files.
         </p>
         <Button
+          v-if="canExport"
           label="Download Export"
           icon="pi pi-download"
           :loading="exporting"
           :disabled="exporting"
           @click="triggerExport"
         />
+        <p v-else class="description">You don't have permission to export the database.</p>
       </template>
     </Card>
 
     <!-- Import -->
-    <Card class="section-card">
+    <Card v-if="canImport" class="section-card">
       <template #title>
         <div class="card-header">
           <i class="pi pi-download" style="margin-right: 0.5rem" />
@@ -130,6 +149,9 @@ const onFileSelected = async (event: Event) => {
           Import a previously exported ZIP archive. <strong>All existing data and media files will be replaced.</strong>
           Legacy JSON-only exports are also accepted.
         </p>
+        <Message severity="warn" :closable="false" style="margin-bottom: 1rem">
+          This permanently overwrites the entire database and cannot be undone.
+        </Message>
 
         <!-- hidden file input -->
         <input

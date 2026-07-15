@@ -6,6 +6,7 @@ import { useConfirm } from 'primevue/useconfirm'
 import { useScreengroupsStore } from '../stores/screengroups'
 import { useScreensStore } from '../stores/screens'
 import { useContentStore } from '../stores/content'
+import { useRightsStore } from '../stores/rights'
 import type { Screengroup, Content } from '../types/models'
 
 // PrimeVue components
@@ -32,6 +33,13 @@ const { on, off } = useSocket()
 const screengroupsStore = useScreengroupsStore()
 const screensStore = useScreensStore()
 const contentStore = useContentStore()
+const rightsStore = useRightsStore()
+
+const canCreate = computed(() => rightsStore.can('screengroups.create'))
+const canRename = computed(() => rightsStore.can('screengroups.rename'))
+const canDelete = computed(() => rightsStore.can('screengroups.delete'))
+const canManageScreens = computed(() => rightsStore.can('screengroups.manage_screens'))
+const canManageContent = computed(() => rightsStore.can('screengroups.manage_content'))
 
 const filterText = ref('')
 
@@ -311,13 +319,23 @@ const removeAllContentFromGroup = () => {
 </script>
 
 <template>
-  <div class="screengroups-view">
+  <div v-if="rightsStore.loaded && !rightsStore.can('screengroups.page')" class="screengroups-view">
+    <Card>
+      <template #content>
+        <div class="empty-state">
+          <i class="pi pi-lock" style="font-size: 3rem"></i>
+          <p>You don't have access to the Screen Groups page.</p>
+        </div>
+      </template>
+    </Card>
+  </div>
+  <div v-else class="screengroups-view">
     <Card>
       <template #title>
         <div class="card-header">
           <span>Screen Groups</span>
           <div class="header-actions">
-            <Button icon="pi pi-plus" label="New Screen Group" @click="openNewDialog" size="small" />
+            <Button v-if="canCreate" icon="pi pi-plus" label="New Screen Group" @click="openNewDialog" size="small" />
             <Button icon="pi pi-refresh" @click="refreshData" size="small" outlined />
           </div>
         </div>
@@ -364,9 +382,9 @@ const removeAllContentFromGroup = () => {
           <Column header="Actions" style="width: 150px">
             <template #body="{ data }">
               <div class="action-buttons">
-                <Button icon="pi pi-pencil" @click="openEditDialog(data)" size="small" outlined title="Edit" />
+                <Button v-if="canRename" icon="pi pi-pencil" @click="openEditDialog(data)" size="small" outlined title="Edit" />
                 <Button
-                  v-if="data.screens_count === 0 && data.content_count === 0"
+                  v-if="canDelete && data.screens_count === 0 && data.content_count === 0"
                   icon="pi pi-trash"
                   @click="deleteScreenGroup(data)"
                   size="small"
@@ -436,7 +454,7 @@ const removeAllContentFromGroup = () => {
                 </Column>
                 <Column header="Actions" style="width:120px">
                   <template #body="{ data }">
-                    <Button icon="pi pi-minus" @click="removeScreenFromGroup(data)" size="small" severity="danger" text title="Remove from group" />
+                    <Button v-if="canManageScreens" icon="pi pi-minus" @click="removeScreenFromGroup(data)" size="small" severity="danger" text title="Remove from group" />
                   </template>
                 </Column>
               </DataTable>
@@ -467,7 +485,7 @@ const removeAllContentFromGroup = () => {
                 </Column>
                 <Column header="Actions" style="width:120px">
                   <template #body="{ data }">
-                    <Button icon="pi pi-plus" @click="addScreenToGroup(data)" size="small" severity="success" text title="Add to group" />
+                    <Button v-if="canManageScreens" icon="pi pi-plus" @click="addScreenToGroup(data)" size="small" severity="success" text title="Add to group" />
                   </template>
                 </Column>
               </DataTable>
@@ -477,7 +495,7 @@ const removeAllContentFromGroup = () => {
       </div>
       <template #footer>
         <Button
-          v-if="assignedScreens.length > 0"
+          v-if="canManageScreens && assignedScreens.length > 0"
           label="Remove All"
           @click="removeAllScreensFromGroup"
           severity="danger"
@@ -518,7 +536,7 @@ const removeAllContentFromGroup = () => {
                 <Column field="contenttype_name" header="Type" style="width:180px" />
                 <Column header="Actions" style="width:120px">
                   <template #body="{ data }">
-                    <Button icon="pi pi-minus" @click="removeContentFromGroup(data)" size="small" severity="danger" text title="Remove from group" />
+                    <Button v-if="canManageContent" icon="pi pi-minus" @click="removeContentFromGroup(data)" size="small" severity="danger" text title="Remove from group" />
                   </template>
                 </Column>
               </DataTable>
@@ -544,7 +562,7 @@ const removeAllContentFromGroup = () => {
                 <Column field="contenttype_name" header="Type" style="width:180px" />
                 <Column header="Actions" style="width:120px">
                   <template #body="{ data }">
-                    <Button icon="pi pi-plus" @click="addContentToGroup(data)" size="small" severity="success" text title="Add to group" />
+                    <Button v-if="canManageContent" icon="pi pi-plus" @click="addContentToGroup(data)" size="small" severity="success" text title="Add to group" />
                   </template>
                 </Column>
               </DataTable>
@@ -554,7 +572,7 @@ const removeAllContentFromGroup = () => {
       </div>
       <template #footer>
         <Button
-          v-if="assignedContent.length > 0"
+          v-if="canManageContent && assignedContent.length > 0"
           label="Remove All"
           @click="removeAllContentFromGroup"
           severity="danger"

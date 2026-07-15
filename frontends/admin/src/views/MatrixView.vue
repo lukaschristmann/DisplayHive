@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useSocket } from '../composables/useSocket'
 import { useToast } from 'primevue/usetoast'
+import { useRightsStore } from '../stores/rights'
 
 // PrimeVue components
 import Card from 'primevue/card'
@@ -23,6 +24,8 @@ interface Screengroup {
 
 const toast = useToast()
 const { on, off, emit } = useSocket()
+const rightsStore = useRightsStore()
+const canAccess = computed(() => rightsStore.can('screens.page') && rightsStore.can('screengroups.page'))
 
 const screens = ref<Screen[]>([])
 const screengroups = ref<Screengroup[]>([])
@@ -170,7 +173,17 @@ const activeScreens = computed(() => screens.value.filter((s) => s.active))
 </script>
 
 <template>
-  <div class="matrix-view">
+  <div v-if="rightsStore.loaded && !canAccess" class="matrix-view">
+    <Card>
+      <template #content>
+        <div class="empty-state">
+          <i class="pi pi-lock" style="font-size: 3rem"></i>
+          <p>You don't have access to the Matrix page.</p>
+        </div>
+      </template>
+    </Card>
+  </div>
+  <div v-else class="matrix-view">
     <Card>
       <template #title>
         <div class="card-header">
@@ -213,12 +226,13 @@ const activeScreens = computed(() => screens.value.filter((s) => s.active))
                   v-for="sg in screengroups"
                   :key="sg.id"
                   class="matrix-cell"
-                  @click="toggleAssignment(screen.id, sg.id)"
+                  @click="rightsStore.can('screengroups.manage_screens') && toggleAssignment(screen.id, sg.id)"
                 >
                   <Checkbox
                     :modelValue="isChecked(screen.id, sg.id)"
                     :binary="true"
-                    @click.stop="toggleAssignment(screen.id, sg.id)"
+                    :disabled="!rightsStore.can('screengroups.manage_screens')"
+                    @click.stop="rightsStore.can('screengroups.manage_screens') && toggleAssignment(screen.id, sg.id)"
                   />
                 </td>
               </tr>

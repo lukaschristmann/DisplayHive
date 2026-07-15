@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 def register_admin_pretalx_handlers(socketio, app, db):
     """Register socket handlers and background poller for the Pretalx admin page."""
-    from application.socketio_handlers.auth import admin_handler
+    from application.socketio_handlers.auth import require_right
 
     # ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -278,12 +278,12 @@ def register_admin_pretalx_handlers(socketio, app, db):
     # ── Socket event handlers ─────────────────────────────────────────────────
 
     @socketio.on('displayhive:admin:pretalx:cts:get_settings')
-    @admin_handler
+    @require_right('pretalx.page')
     def handle_get_settings(data=None):
         _emit_settings(request.sid)
 
     @socketio.on('displayhive:admin:pretalx:cts:save_settings')
-    @admin_handler
+    @require_right('pretalx.manage')
     def handle_save_settings(data=None):
         if not data or not isinstance(data, dict):
             return {'ok': False, 'error': 'Invalid payload'}
@@ -314,12 +314,12 @@ def register_admin_pretalx_handlers(socketio, app, db):
         return {'ok': True}
 
     @socketio.on('displayhive:admin:pretalx:cts:get_urls')
-    @admin_handler
+    @require_right('pretalx.page')
     def handle_get_urls(data=None):
         _emit_urls(request.sid)
 
     @socketio.on('displayhive:admin:pretalx:cts:add_url')
-    @admin_handler
+    @require_right('pretalx.manage')
     def handle_add_url(data=None):
         from application.models import PretalxApiUrl, PretalxApiCache
 
@@ -365,7 +365,7 @@ def register_admin_pretalx_handlers(socketio, app, db):
         return {'ok': True, 'is_valid': is_valid}
 
     @socketio.on('displayhive:admin:pretalx:cts:update_url')
-    @admin_handler
+    @require_right('pretalx.manage')
     def handle_update_url(data=None):
         from application.models import PretalxApiUrl
 
@@ -391,7 +391,7 @@ def register_admin_pretalx_handlers(socketio, app, db):
         return {'ok': True}
 
     @socketio.on('displayhive:admin:pretalx:cts:delete_url')
-    @admin_handler
+    @require_right('pretalx.manage')
     def handle_delete_url(data=None):
         from application.models import PretalxApiUrl
 
@@ -410,7 +410,7 @@ def register_admin_pretalx_handlers(socketio, app, db):
         return {'ok': True}
 
     @socketio.on('displayhive:admin:pretalx:cts:get_rooms')
-    @admin_handler
+    @require_right('pretalx.page')
     def handle_get_rooms(data=None):
         from application.models import PretalxApiUrl
         url_id = (data or {}).get('id')
@@ -426,7 +426,7 @@ def register_admin_pretalx_handlers(socketio, app, db):
         return {'ok': True, 'rooms': sorted(rooms)}
 
     @socketio.on('displayhive:admin:pretalx:cts:get_cache')
-    @admin_handler
+    @require_right('pretalx.page')
     def handle_get_cache(data=None):
         from application.models import PretalxApiUrl
 

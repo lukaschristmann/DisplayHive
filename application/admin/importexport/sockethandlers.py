@@ -9,10 +9,10 @@ logger = logging.getLogger(__name__)
 def register_admin_importexport_handlers(socketio, app, db):
     """Register socket.io handlers for database import/export."""
     from flask import request
-    from application.socketio_handlers.auth import admin_handler
+    from application.socketio_handlers.auth import require_right
 
     @socketio.on('displayhive:importexport:cts:export')
-    @admin_handler
+    @require_right('importexport.export')
     def handle_export(data=None):
         """Export the whole database and send it back to the requesting admin."""
         sid = getattr(request, 'sid', None)
@@ -35,7 +35,7 @@ def register_admin_importexport_handlers(socketio, app, db):
             )
 
     @socketio.on('displayhive:importexport:cts:import')
-    @admin_handler
+    @require_right('importexport.import')
     def handle_import(data=None):
         """Import database from a JSON payload sent by an admin."""
         sid = getattr(request, 'sid', None)

@@ -5,6 +5,7 @@ import { useOnlineFilter } from '../composables/useOnlineFilter'
 import type { Device } from '../types/models'
 import { useDevicesStore } from '../stores/devices'
 import { useScreensStore } from '../stores/screens'
+import { useRightsStore } from '../stores/rights'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
 
@@ -23,6 +24,15 @@ const toast = useToast()
 const confirm = useConfirm()
 const devicesStore = useDevicesStore()
 const screensStore = useScreensStore()
+const rightsStore = useRightsStore()
+
+const canEnable = computed(() => rightsStore.can('device.enable'))
+const canRename = computed(() => rightsStore.can('device.rename'))
+const canDelete = computed(() => rightsStore.can('device.delete'))
+const canShowKey = computed(() => rightsStore.can('device.showkey'))
+const canAdopt = computed(() => rightsStore.can('device.adopt'))
+const canPreview = computed(() => rightsStore.can('device.preview'))
+const canAssign = computed(() => rightsStore.can('device.assign'))
 
 const filterText = ref('')
 
@@ -43,14 +53,17 @@ const scannerActive = ref(false)
 const scannerEl = ref<HTMLElement | null>(null)
 let html5QrScanner: Html5Qrcode | null = null
 
-// Edit device dialog
-const isSavingDevice = ref(false)
-const showEditDialog = ref(false)
-const editingDevice = ref<Device | null>(null)
-const editForm = ref({
-  name: '',
-  screen_id: null as number | null,
-})
+// Rename device dialog
+const isSavingRename = ref(false)
+const showRenameDialog = ref(false)
+const renamingDevice = ref<Device | null>(null)
+const renameForm = ref({ name: '' })
+
+// Assign-to-screen dialog
+const isSavingAssign = ref(false)
+const showAssignDialog = ref(false)
+const assigningDevice = ref<Device | null>(null)
+const assignForm = ref({ screen_id: null as number | null })
 
 const filteredDevices = computed(() => {
   let list = devicesStore.devices.slice()
@@ -79,7 +92,7 @@ const screenOptions = computed(() => {
   ]
 })
 
-const screenOptionsForEdit = computed(() => {
+const screenOptionsForAssign = computed(() => {
   const assigned = new Set<number>()
   devicesStore.devices.forEach((d) => {
     if (d.screen_id) assigned.add(d.screen_id)
@@ -88,7 +101,7 @@ const screenOptionsForEdit = computed(() => {
     { label: '-- No Screen --', value: null },
   ]
   screensStore.screens.forEach((s) => {
-    if (!assigned.has(s.id) || editingDevice.value?.screen_id === s.id) {
+    if (!assigned.has(s.id) || assigningDevice.value?.screen_id === s.id) {
       options.push({ label: s.name, value: s.id })
     }
   })
@@ -199,28 +212,41 @@ const adoptDevice = async () => {
   }
 }
 
-const openEditDialog = (device: Device) => {
-  editingDevice.value = device
-  editForm.value = {
-    name: device.name ?? '',
-    screen_id: device.screen_id ?? null,
-  }
-  showEditDialog.value = true
+const openRenameDialog = (device: Device) => {
+  renamingDevice.value = device
+  renameForm.value = { name: device.name ?? '' }
+  showRenameDialog.value = true
 }
 
-const saveDevice = async (keepOpen = false) => {
-  if (!editingDevice.value) return
-  isSavingDevice.value = true
+const saveRename = async (keepOpen = false) => {
+  if (!renamingDevice.value) return
+  isSavingRename.value = true
   try {
-    devicesStore.updateDevice(editingDevice.value.id, { name: editForm.value.name })
-    if (editForm.value.screen_id !== editingDevice.value.screen_id) {
-      devicesStore.assignScreen(editingDevice.value.id, editForm.value.screen_id ?? null)
-    }
-    toast.add({ severity: 'success', summary: 'Success', detail: 'Device updated', life: 3000 })
-    if (!keepOpen) showEditDialog.value = false
+    devicesStore.updateDevice(renamingDevice.value.id, { name: renameForm.value.name })
+    toast.add({ severity: 'success', summary: 'Success', detail: 'Device renamed', life: 3000 })
+    if (!keepOpen) showRenameDialog.value = false
     devicesStore.fetch()
   } finally {
-    isSavingDevice.value = false
+    isSavingRename.value = false
+  }
+}
+
+const openAssignDialog = (device: Device) => {
+  assigningDevice.value = device
+  assignForm.value = { screen_id: device.screen_id ?? null }
+  showAssignDialog.value = true
+}
+
+const saveAssign = async () => {
+  if (!assigningDevice.value) return
+  isSavingAssign.value = true
+  try {
+    devicesStore.assignScreen(assigningDevice.value.id, assignForm.value.screen_id ?? null)
+    toast.add({ severity: 'success', summary: 'Success', detail: 'Screen assignment updated', life: 3000 })
+    showAssignDialog.value = false
+    devicesStore.fetch()
+  } finally {
+    isSavingAssign.value = false
   }
 }
 
@@ -235,6 +261,15 @@ const toggleActiveDevice = (device: Device, val: boolean) => {
 }
 
 const playDevice = (device: Device) => {
+  if (!device.devicekey) {
+    toast.add({
+      severity: 'error',
+      summary: 'Cannot preview',
+      detail: 'Device key is not visible to this account (requires device.showkey).',
+      life: 4000,
+    })
+    return
+  }
   try {
     const env = (import.meta as any).env || {}
     // Allow overriding screen URL via Vite env `VITE_SCREEN_URL`. Otherwise:
@@ -294,13 +329,24 @@ const deleteDevice = (device: Device) => {
 </script>
 
 <template>
-  <div class="devices-view">
+  <div v-if="rightsStore.loaded && !rightsStore.can('device.page')" class="devices-view">
+    <Card>
+      <template #content>
+        <div class="empty-state">
+          <i class="pi pi-lock" style="font-size: 3rem"></i>
+          <p>You don't have access to the Devices page.</p>
+        </div>
+      </template>
+    </Card>
+  </div>
+  <div v-else class="devices-view">
     <Card>
       <template #title>
         <div class="card-header">
           <span>Adopted Devices</span>
           <div class="header-actions">
             <Button
+              v-if="canAdopt"
               icon="pi pi-plus"
               label="Adopt Device"
               @click="openAdoptDialog"
@@ -356,11 +402,15 @@ const deleteDevice = (device: Device) => {
           </template>
           <Column field="is_active" header="Active" style="width: 80px">
             <template #body="{ data }">
-              <ToggleSwitch v-model="data.is_active" @update:modelValue="(val) => toggleActiveDevice(data, val)" />
+              <ToggleSwitch
+                v-model="data.is_active"
+                :disabled="!canEnable"
+                @update:modelValue="(val) => toggleActiveDevice(data, val)"
+              />
             </template>
           </Column>
           <Column field="name" header="Name" sortable />
-          <Column field="devicekey" header="Device Key" sortable style="width: 220px;">
+          <Column v-if="canShowKey" field="devicekey" header="Device Key" sortable style="width: 220px;">
             <template #body="{ data }">
               <div class="key-cell">
                 <Button class="key-button" icon="pi pi-key" size="small" outlined @click="() => copyDeviceKey(data)" :title="'Copy key'">
@@ -391,6 +441,7 @@ const deleteDevice = (device: Device) => {
             <template #body="{ data }">
               <div class="action-buttons">
                 <Button
+                  v-if="canPreview"
                   icon="pi pi-play"
                   @click="() => playDevice(data)"
                   size="small"
@@ -398,11 +449,20 @@ const deleteDevice = (device: Device) => {
                   title="Play"
                 />
                 <Button
+                  v-if="canRename"
                   icon="pi pi-pencil"
-                  @click="openEditDialog(data)"
+                  @click="openRenameDialog(data)"
                   size="small"
                   outlined
-                  title="Edit"
+                  title="Rename"
+                />
+                <Button
+                  v-if="canAssign"
+                  icon="pi pi-desktop"
+                  @click="openAssignDialog(data)"
+                  size="small"
+                  outlined
+                  title="Assign to Screen"
                 />
                 <Button
                   v-if="data.is_online"
@@ -414,6 +474,7 @@ const deleteDevice = (device: Device) => {
                   title="Locate Device"
                 />
                 <Button
+                  v-if="canDelete"
                   icon="pi pi-trash"
                   @click="deleteDevice(data)"
                   size="small"
@@ -477,30 +538,39 @@ const deleteDevice = (device: Device) => {
       </template>
     </Dialog>
 
-    <!-- Edit Device Dialog -->
-    <Dialog v-model:visible="showEditDialog" header="Edit Device" modal :style="{ width: '450px' }">
+    <!-- Rename Device Dialog -->
+    <Dialog v-model:visible="showRenameDialog" header="Rename Device" modal :style="{ width: '420px' }">
       <div class="dialog-content">
         <div class="field">
-          <label for="edit-name">Device Name</label>
-          <InputText id="edit-name" v-model="editForm.name" class="w-full" />
+          <label for="rename-name">Device Name</label>
+          <InputText id="rename-name" v-model="renameForm.name" class="w-full" />
         </div>
+      </div>
+      <template #footer>
+        <Button label="Cancel" @click="showRenameDialog = false" text :disabled="isSavingRename" />
+        <Button label="Update" severity="secondary" outlined @click="saveRename(true)" :loading="isSavingRename" :disabled="isSavingRename" />
+        <Button label="Save" @click="saveRename()" :loading="isSavingRename" :disabled="isSavingRename" />
+      </template>
+    </Dialog>
+
+    <!-- Assign to Screen Dialog -->
+    <Dialog v-model:visible="showAssignDialog" header="Assign to Screen" modal :style="{ width: '420px' }">
+      <div class="dialog-content">
         <div class="field">
-          <label for="edit-screen">Assign to Screen</label>
+          <label for="assign-screen">Assign to Screen</label>
           <Select
-            id="edit-screen"
-            v-model="editForm.screen_id"
-            :options="screenOptionsForEdit"
+            id="assign-screen"
+            v-model="assignForm.screen_id"
+            :options="screenOptionsForAssign"
             optionLabel="label"
             optionValue="value"
             class="w-full"
           />
         </div>
-        <!-- Active toggle removed from edit dialog (toggle inline in table) -->
       </div>
       <template #footer>
-        <Button label="Cancel" @click="showEditDialog = false" text :disabled="isSavingDevice" />
-        <Button label="Update" severity="secondary" outlined @click="saveDevice(true)" :loading="isSavingDevice" :disabled="isSavingDevice" />
-        <Button label="Save" @click="saveDevice()" :loading="isSavingDevice" :disabled="isSavingDevice" />
+        <Button label="Cancel" @click="showAssignDialog = false" text :disabled="isSavingAssign" />
+        <Button label="Save" @click="saveAssign()" :loading="isSavingAssign" :disabled="isSavingAssign" />
       </template>
     </Dialog>
   </div>
@@ -536,6 +606,10 @@ const deleteDevice = (device: Device) => {
 
 .key-button {
   padding: 0.25rem;
+}
+
+.key-hidden {
+  color: #9ca3af;
 }
 
   .key-text {

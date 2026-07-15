@@ -9,9 +9,9 @@ logger = logging.getLogger(__name__)
 
 def register_admin_user_handlers(socketio, app, db):
     """Register socket handlers for listing/creating/updating/deleting admin users."""
-    from application.socketio_handlers.auth import admin_handler
+    from application.socketio_handlers.auth import require_right, admin_handler, current_admin_user, is_impersonating
     from application.models import AdminUser
-    from application.auth import hash_password
+    from application.auth import hash_password, create_token
 
     def _emit_users(sid=None):
         """Build the full user list payload and emit it (never includes password_hash)."""
@@ -22,12 +22,12 @@ def register_admin_user_handlers(socketio, app, db):
         socketio.emit('displayhive:admin:users:stc:users', payload, room=sid or 'admins')
 
     @socketio.on('displayhive:admin:users:cts:get_users')
-    @admin_handler
+    @require_right('users.page')
     def handle_get_users(data=None):
         _emit_users(getattr(request, 'sid', None))
 
     @socketio.on('displayhive:admin:users:cts:create_user')
-    @admin_handler
+    @require_right('users.create')
     def handle_create_user(data):
         """Create a new admin user. data: {username, password}."""
         username = str((data or {}).get('username', '')).strip()
@@ -54,7 +54,16 @@ def register_admin_user_handlers(socketio, app, db):
     @socketio.on('displayhive:admin:users:cts:update_user')
     @admin_handler
     def handle_update_user(data):
-        """Update username and/or reset password. data: {id, username?, password?}."""
+        """Update username and/or reset password. data: {id, username?, password?}.
+
+        The two fields are gated by separate rights (users.edit / users.set_password),
+        so each requested field is checked independently and silently dropped if the
+        caller lacks the right for that specific field — same pattern as
+        media.rename/media.tag and device.rename/device.enable.
+        """
+        from application.permissions import has_right
+        caller = current_admin_user()
+
         user_id = (data or {}).get('id')
         if not user_id:
             return {'success': False, 'error': 'Missing id'}
@@ -64,6 +73,8 @@ def register_admin_user_handlers(socketio, app, db):
             return {'success': False, 'error': 'User not found'}
 
         new_username = (data or {}).get('username')
+        if new_username is not None and not has_right(db, caller, 'users.edit'):
+            new_username = None
         if new_username is not None:
             new_username = str(new_username).strip()
             if not new_username:
@@ -77,6 +88,8 @@ def register_admin_user_handlers(socketio, app, db):
                 user.username = new_username
 
         new_password = (data or {}).get('password')
+        if new_password and not has_right(db, caller, 'users.set_password'):
+            new_password = None
         if new_password:
             if len(new_password) < 8:
                 return {'success': False, 'error': 'Password must be at least 8 characters'}
@@ -89,7 +102,7 @@ def register_admin_user_handlers(socketio, app, db):
         return {'success': True}
 
     @socketio.on('displayhive:admin:users:cts:set_active')
-    @admin_handler
+    @require_right('users.activate')
     def handle_set_active(data):
         """Activate/deactivate a user. data: {id, is_active}. Refuses to leave zero active admins."""
         user_id = (data or {}).get('id')
@@ -114,7 +127,7 @@ def register_admin_user_handlers(socketio, app, db):
         return {'success': True}
 
     @socketio.on('displayhive:admin:users:cts:delete_user')
-    @admin_handler
+    @require_right('users.delete')
     def handle_delete_user(data):
         """Delete a user. Refuses to delete the last remaining admin account."""
         user_id = (data or {}).get('id')
@@ -135,3 +148,41 @@ def register_admin_user_handlers(socketio, app, db):
         db.session.commit()
         _emit_users()
         return {'success': True}
+
+    @socketio.on('displayhive:admin:users:cts:impersonate')
+    @require_right('special.impersonate')
+    def handle_impersonate(data):
+        """Issue an impersonation token: log the caller in as another user, with
+        that user's own rights. data: {user_id}.
+
+        Refuses to chain — a session already running under an impersonation
+        token cannot start a second one, even if the impersonated user also
+        holds special.impersonate (see application.socketio_handlers.auth.is_impersonating).
+        """
+        if is_impersonating():
+            return {'success': False, 'error': 'Cannot impersonate while already impersonating'}
+
+        data = data or {}
+        target_id = data.get('user_id')
+        if not target_id:
+            return {'success': False, 'error': 'Missing user_id'}
+
+        actor = current_admin_user()
+        if actor and int(target_id) == actor.id:
+            return {'success': False, 'error': 'Cannot impersonate yourself'}
+
+        target = db.session.get(AdminUser, target_id)
+        if not target:
+            return {'success': False, 'error': 'User not found'}
+        if not target.is_active:
+            return {'success': False, 'error': 'Cannot impersonate a deactivated user'}
+
+        from flask import current_app
+        token = create_token(current_app._get_current_object(), target, impersonator_id=actor.id)
+        logger.info("Admin '%s' started impersonating '%s'", actor.username, target.username)
+        return {
+            'success': True,
+            'token': token,
+            'username': target.username,
+            'impersonator_username': actor.username,
+        }

@@ -38,6 +38,29 @@ def require_jwt_auth(app):
     return decorator
 
 
+def require_http_right(app, right_key):
+    """Return a decorator requiring both a valid JWT and *right_key*.
+
+    Stack this under `@require_jwt_auth(app)` on Flask routes that need a
+    specific right, not just any authenticated admin — e.g. the database
+    import/export routes in app.py. Fails closed: missing/invalid token or
+    missing right both return 401.
+    """
+    def decorator(fn):
+        @wraps(fn)
+        def wrapped(*args, **kwargs):
+            auth_header = request.headers.get('Authorization', '')
+            token = auth_header[7:] if auth_header.startswith('Bearer ') else None
+            from application.models import db
+            from application.permissions import has_right
+            user = user_from_token(app, db, token)
+            if not user or not has_right(db, user, right_key):
+                return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+            return fn(*args, **kwargs)
+        return wrapped
+    return decorator
+
+
 def register_auth_routes(app, db):
     """Register the login and session-check HTTP routes."""
     from application.models import AdminUser

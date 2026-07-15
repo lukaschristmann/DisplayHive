@@ -18,7 +18,7 @@ log_history = deque(maxlen=100)
 
 def register_logger_handlers(socketio, app, db):
     """Register all logger-related socket.io event handlers."""
-    from application.socketio_handlers.auth import admin_handler
+    from application.socketio_handlers.auth import require_right
 
     global is_logger_connected
     logger_room = app.config.get('LOGGER_ROOM', 'logger_room')
@@ -69,7 +69,7 @@ def register_logger_handlers(socketio, app, db):
 
     # New namespaced handlers for admin logger view
     @socketio.on('displayhive:logger:cts:subscribe')
-    @admin_handler
+    @require_right('logger.page')
     def handle_logger_subscribe(data=None):
         """Subscribe client to logger room and send log history (admin only)."""
         global is_logger_connected
@@ -88,7 +88,7 @@ def register_logger_handlers(socketio, app, db):
         emit('displayhive:logger:stc:log_history', {'logs': list(log_history)}, room=sid)
 
     @socketio.on('displayhive:logger:cts:unsubscribe')
-    @admin_handler
+    @require_right('logger.page')
     def handle_logger_unsubscribe(data=None):
         """Unsubscribe client from logger room (admin only)."""
         sid = request.sid
@@ -96,7 +96,7 @@ def register_logger_handlers(socketio, app, db):
         log.debug('Client %s unsubscribed from logger room', sid)
 
     @socketio.on('displayhive:logger:cts:get_history')
-    @admin_handler
+    @require_right('logger.page')
     def handle_get_log_history(data=None):
         """Send log history to requesting client (admin only)."""
         sid = request.sid

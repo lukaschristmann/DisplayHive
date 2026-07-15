@@ -9,7 +9,8 @@
 /** A physical device (client hardware) that connects to the socket server. */
 export interface Device {
   id: number
-  devicekey: string
+  /** Null when the caller lacks the device.showkey right (masked server-side). */
+  devicekey: string | null
   is_online: boolean
   name?: string | null
   is_active?: boolean
@@ -81,11 +82,40 @@ export interface MediaItem {
   tags?: string[]
 }
 
-/** An admin account (username/password login, no per-user rights). */
+/** An admin account (username/password login). */
 export interface AdminUser {
   id: number
   username: string
   is_active?: boolean
   created_at?: string | null
   last_login_at?: string | null
+}
+
+/** A single checkable right in the user-rights system, e.g. "media.upload". */
+export interface RightDefinition {
+  key: string
+  category: string
+  label: string
+}
+
+/** A group of users; can be nested via parent_group_id. Holds only allow grants. */
+export interface RightsGroup {
+  id: number
+  name: string
+  parent_group_id: number | null
+  is_superadmin: boolean
+  /** Right keys directly granted to this group (not including inherited ones). */
+  rights: string[]
+}
+
+/** A single override value for a user right: allow/deny always win, inherit falls through to groups. */
+export type RightOverrideValue = 'allow' | 'deny' | 'inherit'
+
+/** An admin user's rights-system state, as returned to the Groups & Rights admin page. */
+export interface UserRightsRow {
+  id: number
+  username: string
+  group_ids: number[]
+  overrides: Record<string, 'allow' | 'deny'>
+  effective_rights: Record<string, boolean>
 }

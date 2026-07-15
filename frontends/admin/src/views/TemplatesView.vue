@@ -5,6 +5,7 @@ import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
 import { useTemplatesStore } from '../stores/templates'
 import { useMagicTagsStore } from '../stores/magicTags'
+import { useRightsStore } from '../stores/rights'
 import type { Template, MagicTag } from '../types/models'
 
 // PrimeVue components
@@ -39,6 +40,15 @@ const confirm = useConfirm()
 const { on, off, emit } = useSocket()
 const templatesStore = useTemplatesStore()
 const magicTagsStore = useMagicTagsStore()
+const rightsStore = useRightsStore()
+
+const canCreate = computed(() => rightsStore.can('templates.create'))
+const canEdit = computed(() => rightsStore.can('templates.edit'))
+const canDelete = computed(() => rightsStore.can('templates.delete'))
+const canMagicTagsPage = computed(() => rightsStore.can('magictags.page'))
+const canMagicTagsCreate = computed(() => rightsStore.can('magictags.create'))
+const canMagicTagsEdit = computed(() => rightsStore.can('magictags.edit'))
+const canMagicTagsDelete = computed(() => rightsStore.can('magictags.delete'))
 
 const filterText = ref('')
 
@@ -432,13 +442,23 @@ const deleteTemplate = (template: Template) => {
 </script>
 
 <template>
-  <div class="templates-view">
+  <div v-if="rightsStore.loaded && !rightsStore.can('templates.page')" class="templates-view">
+    <Card>
+      <template #content>
+        <div class="empty-state">
+          <i class="pi pi-lock" style="font-size: 3rem"></i>
+          <p>You don't have access to the Templates page.</p>
+        </div>
+      </template>
+    </Card>
+  </div>
+  <div v-else class="templates-view">
     <Card>
       <template #title>
         <div class="card-header">
           <span>Templates</span>
           <div class="header-actions">
-            <Button icon="pi pi-plus" label="New Template" @click="openNewDialog" size="small" />
+            <Button v-if="canCreate" icon="pi pi-plus" label="New Template" @click="openNewDialog" size="small" />
             <Button icon="pi pi-refresh" @click="refreshData" size="small" outlined />
           </div>
         </div>
@@ -480,9 +500,9 @@ const deleteTemplate = (template: Template) => {
           <Column header="Actions" style="width: 200px">
             <template #body="{ data }">
               <div class="action-buttons">
-                <Button icon="pi pi-pencil" @click="openEditDialog(data)" size="small" outlined title="Edit" />
+                <Button v-if="canEdit" icon="pi pi-pencil" @click="openEditDialog(data)" size="small" outlined title="Edit" />
                 <Button
-                  v-if="!data.is_default"
+                  v-if="canEdit && !data.is_default"
                   icon="pi pi-check"
                   @click="setDefault(data)"
                   size="small"
@@ -490,8 +510,8 @@ const deleteTemplate = (template: Template) => {
                   outlined
                   title="Set as Default"
                 />
-                <Button icon="pi pi-copy" @click="openCopyDialog(data)" size="small" outlined title="Copy" />
-                <Button icon="pi pi-trash" @click="deleteTemplate(data)" size="small" severity="danger" outlined title="Delete" />
+                <Button v-if="canCreate" icon="pi pi-copy" @click="openCopyDialog(data)" size="small" outlined title="Copy" />
+                <Button v-if="canDelete" icon="pi pi-trash" @click="deleteTemplate(data)" size="small" severity="danger" outlined title="Delete" />
               </div>
             </template>
           </Column>
@@ -500,12 +520,12 @@ const deleteTemplate = (template: Template) => {
     </Card>
 
     <!-- Magic Tags Card -->
-    <Card>
+    <Card v-if="canMagicTagsPage">
       <template #title>
         <div class="card-header">
           <span>Magic Tags</span>
           <div class="header-actions">
-            <Button icon="pi pi-plus" label="New Magic Tag" @click="openNewTagDialog" size="small" />
+            <Button v-if="canMagicTagsCreate" icon="pi pi-plus" label="New Magic Tag" @click="openNewTagDialog" size="small" />
             <Button icon="pi pi-refresh" @click="magicTagsStore.fetch()" size="small" outlined />
           </div>
         </div>
@@ -532,8 +552,8 @@ const deleteTemplate = (template: Template) => {
           <Column header="Actions" style="width: 120px">
             <template #body="{ data }">
               <div class="action-buttons">
-                <Button icon="pi pi-pencil" @click="openEditTagDialog(data)" size="small" outlined title="Edit" />
-                <Button icon="pi pi-trash" @click="deleteTag(data)" size="small" severity="danger" outlined title="Delete" />
+                <Button v-if="canMagicTagsEdit" icon="pi pi-pencil" @click="openEditTagDialog(data)" size="small" outlined title="Edit" />
+                <Button v-if="canMagicTagsDelete" icon="pi pi-trash" @click="deleteTag(data)" size="small" severity="danger" outlined title="Delete" />
               </div>
             </template>
           </Column>
@@ -627,7 +647,7 @@ const deleteTemplate = (template: Template) => {
             />
           </div>
         </div>
-        <div v-if="magicTagsStore.magicTags.length" class="var-tags-section">
+        <div v-if="canMagicTagsPage && magicTagsStore.magicTags.length" class="var-tags-section">
           <label>Magic Tags</label>
           <div class="var-chips">
             <span

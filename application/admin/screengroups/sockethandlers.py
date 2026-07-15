@@ -9,7 +9,8 @@ logger = logging.getLogger(__name__)
 def register_admin_screengroups_handlers(socketio, app, db):
     """Register admin socket handlers related to Screengroups (admin UI)."""
 
-    from application.socketio_handlers.auth import admin_handler, fields
+    from application.socketio_handlers.auth import require_right, fields, admin_handler, current_admin_user
+    from application.permissions import has_right
     from application.models import ContentElement, Screen, Screengroup
 
     def _apply_membership_change(screengroup_id, item_id, *, collection_attr, item_model, action):
@@ -58,7 +59,7 @@ def register_admin_screengroups_handlers(socketio, app, db):
             return {'success': True}
 
     @socketio.on('displayhive:admin:cts:get_screengroup_screens')
-    @admin_handler
+    @require_right('screengroups.page')
     def get_screengroup_screens(message):
         """Get all screens in a screengroup"""
         from application.models import Device
@@ -80,7 +81,7 @@ def register_admin_screengroups_handlers(socketio, app, db):
         logger.debug('Sent %s screens for screengroup %s', len(screens_data), screengroup_id)
 
     @socketio.on('displayhive:admin:cts:add_screen_to_screengroup')
-    @admin_handler
+    @require_right('screengroups.manage_screens')
     def add_screen_to_screengroup(message):
         """Assign a screen to a screengroup."""
         screengroup_id, screen_id = fields(message, 'screengroup_id', 'screen_id')
@@ -90,7 +91,7 @@ def register_admin_screengroups_handlers(socketio, app, db):
         )
 
     @socketio.on('displayhive:admin:cts:remove_screen_from_screengroup')
-    @admin_handler
+    @require_right('screengroups.manage_screens')
     def remove_screen_from_screengroup(message):
         """Remove a screen from a screengroup."""
         screengroup_id, screen_id = fields(message, 'screengroup_id', 'screen_id')
@@ -100,7 +101,7 @@ def register_admin_screengroups_handlers(socketio, app, db):
         )
 
     @socketio.on('displayhive:admin:cts:remove_all_screens_from_screengroup')
-    @admin_handler
+    @require_right('screengroups.manage_screens')
     def remove_all_screens_from_screengroup(message):
         """Remove all screens from a screengroup."""
         (screengroup_id,) = fields(message, 'screengroup_id')
@@ -110,7 +111,7 @@ def register_admin_screengroups_handlers(socketio, app, db):
         )
 
     @socketio.on('displayhive:admin:cts:add_content_to_screengroup')
-    @admin_handler
+    @require_right('screengroups.manage_content')
     def add_content_to_screengroup(message):
         """Add a content_element item to a screengroup."""
         screengroup_id, content_id = fields(message, 'screengroup_id', 'content_id')
@@ -120,7 +121,7 @@ def register_admin_screengroups_handlers(socketio, app, db):
         )
 
     @socketio.on('displayhive:admin:cts:remove_content_from_screengroup')
-    @admin_handler
+    @require_right('screengroups.manage_content')
     def remove_content_from_screengroup(message):
         """Remove a content_element item from a screengroup."""
         screengroup_id, content_id = fields(message, 'screengroup_id', 'content_id')
@@ -130,7 +131,7 @@ def register_admin_screengroups_handlers(socketio, app, db):
         )
 
     @socketio.on('displayhive:admin:cts:remove_all_content_from_screengroup')
-    @admin_handler
+    @require_right('screengroups.manage_content')
     def remove_all_content_from_screengroup(message):
         """Remove all content_element items from a screengroup."""
         (screengroup_id,) = fields(message, 'screengroup_id')
@@ -142,11 +143,18 @@ def register_admin_screengroups_handlers(socketio, app, db):
     @socketio.on("displayhive:admin:cts:get_screengroups")
     @admin_handler
     def handle_get_screengroups(message=None):
-        """Respond to explicit client requests for the screengroups list."""
+        """Respond to explicit client requests for the screengroups list.
+
+        Either screengroups.page or content.page — see
+        application.admin.screengroups.helper._has_screengroups_access.
+        """
+        user = current_admin_user()
+        if not (has_right(db, user, 'screengroups.page') or has_right(db, user, 'content.page')):
+            return
         emit_screengroups_update(socketio, app, db, room=request.sid)
 
     @socketio.on('displayhive:admin:cts:create_screengroup')
-    @admin_handler
+    @require_right('screengroups.create')
     def create_screengroup(message):
         """Create a new screengroup"""
         (name,) = fields(message, 'name')
@@ -171,7 +179,7 @@ def register_admin_screengroups_handlers(socketio, app, db):
         socketio.emit('displayhive:admin:stc:screengroup_created', {'success': True, 'screengroup_id': screengroup.id, 'name': screengroup.name})
 
     @socketio.on('displayhive:admin:cts:rename_screengroup')
-    @admin_handler
+    @require_right('screengroups.rename')
     def rename_screengroup(message):
         """Rename a screengroup"""
         screengroup_id, new_name = fields(message, 'screengroup_id', 'new_name')
@@ -188,7 +196,7 @@ def register_admin_screengroups_handlers(socketio, app, db):
         emit_screengroups_update(socketio, app, db)
 
     @socketio.on('displayhive:admin:cts:delete_screengroup')
-    @admin_handler
+    @require_right('screengroups.delete')
     def delete_screengroup(message):
         """Delete a screengroup (only if it has no screens and no content)"""
         sid = request.sid
@@ -218,7 +226,7 @@ def register_admin_screengroups_handlers(socketio, app, db):
         socketio.emit('displayhive:admin:stc:screengroup_deleted', {'success': True, 'screengroup_id': screengroup_id}, room=sid)
 
     @socketio.on('displayhive:admin:cts:get_screengroup_content')
-    @admin_handler
+    @require_right('screengroups.page')
     def get_screengroup_content(message):
         """Get paginated content for a screengroup"""
         screengroup_id, page, per_page = fields(message, 'screengroup_id', 'page', 'per_page')

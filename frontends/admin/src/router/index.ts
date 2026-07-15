@@ -83,6 +83,11 @@ const router = createRouter({
       name: 'users',
       component: () => import('../views/UsersView.vue'),
     },
+    {
+      // Merged into the Accounts/Groups tabs on /users.
+      path: '/rights',
+      redirect: '/users',
+    },
   ],
 })
 

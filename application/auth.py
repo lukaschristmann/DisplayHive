@@ -36,8 +36,16 @@ def verify_password(password: str, password_hash: str) -> bool:
 # --- JWT ---------------------------------------------------------------------
 
 
-def create_token(app, user) -> str:
-    """Issue a signed JWT for *user* (an AdminUser instance)."""
+def create_token(app, user, impersonator_id=None) -> str:
+    """Issue a signed JWT for *user* (an AdminUser instance).
+
+    If *impersonator_id* is given, the token is an impersonation session:
+    it authenticates as *user* (so they get exactly *user*'s rights) but
+    carries an 'imp' claim recording who is really driving it. Since the
+    token is signed, a client cannot forge or strip this claim — it is what
+    lets the server refuse to let an impersonation session start another
+    impersonation (see application.socketio_handlers.auth.is_impersonating).
+    """
     now = datetime.now(timezone.utc)
     payload = {
         # 'sub' must be a string per RFC 7519 — PyJWT rejects a bare int on decode.
@@ -49,6 +57,8 @@ def create_token(app, user) -> str:
         'iat': now,
         'exp': now + TOKEN_TTL,
     }
+    if impersonator_id is not None:
+        payload['imp'] = int(impersonator_id)
     return jwt.encode(payload, app.config['SECRET_KEY'], algorithm=TOKEN_ALGORITHM)
 
 

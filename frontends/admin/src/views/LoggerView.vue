@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useSocket } from '../composables/useSocket'
+import { useRightsStore } from '../stores/rights'
 import type { Screen } from '../types/models'
 
 // PrimeVue components
@@ -8,6 +9,8 @@ import Card from 'primevue/card'
 import Select from 'primevue/select'
 import Button from 'primevue/button'
 import Tag from 'primevue/tag'
+
+const rightsStore = useRightsStore()
 
 interface LogEntry {
   timestamp: string
@@ -132,7 +135,17 @@ const sendTestLog = () => {
 </script>
 
 <template>
-  <div class="logger-view">
+  <div v-if="rightsStore.loaded && !rightsStore.can('logger.page')" class="logger-view">
+    <Card>
+      <template #content>
+        <div class="empty-state">
+          <i class="pi pi-lock" style="font-size: 3rem"></i>
+          <p>You don't have access to the Logger page.</p>
+        </div>
+      </template>
+    </Card>
+  </div>
+  <div v-else class="logger-view">
     <Card>
       <template #title>
         <div class="card-header">

@@ -4,7 +4,7 @@ from flask import request
 def register_admin_magictags_handlers(socketio, app, db):
     """Register socket handlers for the admin Magic Tags card."""
 
-    from application.socketio_handlers.auth import admin_handler, fields
+    from application.socketio_handlers.auth import require_right, fields
     from application.models import MagicTag
 
     def _emit_magic_tags(room=None):
@@ -14,12 +14,12 @@ def register_admin_magictags_handlers(socketio, app, db):
         socketio.emit('displayhive:admin:stc:upd_magic_tags', payload, room=room or 'admins')
 
     @socketio.on('displayhive:admin:cts:get_magic_tags')
-    @admin_handler
+    @require_right('magictags.page')
     def get_magic_tags(message=None):
         _emit_magic_tags(room=request.sid)
 
     @socketio.on('displayhive:admin:cts:create_magic_tag')
-    @admin_handler
+    @require_right('magictags.create')
     def handle_create_magic_tag(data=None):
         name, value = fields(data, 'name', 'value')
         tag = MagicTag(name=name or '', value=value or '')
@@ -28,7 +28,7 @@ def register_admin_magictags_handlers(socketio, app, db):
         _emit_magic_tags()
 
     @socketio.on('displayhive:admin:cts:update_magic_tag')
-    @admin_handler
+    @require_right('magictags.edit')
     def handle_update_magic_tag(data=None):
         (tag_id,) = fields(data, 'id')
         if not tag_id:
@@ -43,7 +43,7 @@ def register_admin_magictags_handlers(socketio, app, db):
         _emit_magic_tags()
 
     @socketio.on('displayhive:admin:cts:delete_magic_tag')
-    @admin_handler
+    @require_right('magictags.delete')
     def handle_delete_magic_tag(data=None):
         (tag_id,) = fields(data, 'id')
         if not tag_id:

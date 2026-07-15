@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useSocket } from '../composables/useSocket'
 import { useToast } from 'primevue/usetoast'
+import { useRightsStore } from '../stores/rights'
 
 import Card from 'primevue/card'
 import Button from 'primevue/button'
@@ -12,6 +13,9 @@ import Checkbox from 'primevue/checkbox'
 
 const { on, off, emit, emitWithAck } = useSocket()
 const toast = useToast()
+const rightsStore = useRightsStore()
+const canManage = computed(() => rightsStore.can('alerting.manage'))
+const canShowToken = computed(() => rightsStore.can('alerting.showtoken'))
 
 // ── Settings ─────────────────────────────────────────────────────────────────
 const loading = ref(true)
@@ -220,7 +224,17 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="alerting-view">
+  <div v-if="rightsStore.loaded && !rightsStore.can('alerting.page')" class="alerting-view">
+    <Card>
+      <template #content>
+        <div class="empty-state">
+          <i class="pi pi-lock" style="font-size: 3rem"></i>
+          <p>You don't have access to the Alerting page.</p>
+        </div>
+      </template>
+    </Card>
+  </div>
+  <div v-else class="alerting-view">
 
     <div v-if="loading" class="loading-state">
       <i class="pi pi-spin pi-spinner" style="font-size: 2rem"></i>
@@ -248,8 +262,10 @@ onUnmounted(() => {
                   class="w-full"
                   :placeholder="hasToken ? '••••••• (token configured — enter new token to replace)' : '123456789:ABCdef...'"
                   type="password"
+                  :disabled="!canShowToken"
                 />
                 <Button
+                  v-if="canShowToken"
                   label="Save"
                   icon="pi pi-check"
                   :loading="savingToken"
@@ -278,6 +294,7 @@ onUnmounted(() => {
                   <template #body="{ data }">
                     <div class="action-buttons">
                       <Button
+                        v-if="canManage"
                         icon="pi pi-envelope"
                         size="small"
                         outlined
@@ -287,6 +304,7 @@ onUnmounted(() => {
                         @click="sendTest(data)"
                       />
                       <Button
+                        v-if="canManage"
                         icon="pi pi-minus"
                         size="small"
                         outlined
@@ -340,6 +358,7 @@ onUnmounted(() => {
                   <Column header="" style="width: 60px">
                     <template #body="{ data }">
                       <Button
+                        v-if="canManage"
                         icon="pi pi-plus"
                         size="small"
                         outlined
@@ -396,7 +415,7 @@ onUnmounted(() => {
                     <Checkbox
                       :modelValue="isSubscribed(user.id, at.key)"
                       :binary="true"
-                      :disabled="togglingKey === `${user.id}:${at.key}`"
+                      :disabled="!canManage || togglingKey === `${user.id}:${at.key}`"
                       @change="toggleSubscription(user.id, at.key)"
                     />
                   </td>

@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 def register_admin_templates_handlers(socketio, app, db):
     """Register socket handlers for the admin Templates page."""
     from application.admin.templates.helper import emit_templates_update
-    from application.socketio_handlers.auth import admin_handler
+    from application.socketio_handlers.auth import require_right
     from application.models import Template, ContentContainer
 
     def _emit_templates(room=None):
@@ -17,13 +17,13 @@ def register_admin_templates_handlers(socketio, app, db):
         emit_templates_update(socketio, app, db, room=room)
 
     @socketio.on('displayhive:admin:cts:get_templates')
-    @admin_handler
+    @require_right('templates.page')
     def get_admin_templates(message=None):
         """Emit the current templates list to the requesting client."""
         _emit_templates(room=request.sid)
 
     @socketio.on('displayhive:admin:cts:get_template')
-    @admin_handler
+    @require_right('templates.page')
     def get_template(message=None):
         """Emit full template detail (including html and css) for a single template id."""
         if not message or not isinstance(message, dict):
@@ -53,7 +53,7 @@ def register_admin_templates_handlers(socketio, app, db):
         socketio.emit('displayhive:admin:stc:template_detail', payload, room=request.sid)
 
     @socketio.on('displayhive:admin:cts:create_template')
-    @admin_handler
+    @require_right('templates.create')
     def handle_create_template(data=None):
         """Create a template from socket payload. Accepts container_config to create ContentContainer rows."""
         if not data or not isinstance(data, dict):
@@ -84,7 +84,7 @@ def register_admin_templates_handlers(socketio, app, db):
         _emit_templates()
 
     @socketio.on('displayhive:admin:cts:update_template')
-    @admin_handler
+    @require_right('templates.edit')
     def handle_update_template(data=None):
         """Update a template and its containers from socket payload."""
         if not data or not isinstance(data, dict):
@@ -141,7 +141,7 @@ def register_admin_templates_handlers(socketio, app, db):
                 logger.exception('update_template: failed to push content to screens')
 
     @socketio.on('displayhive:admin:cts:delete_template')
-    @admin_handler
+    @require_right('templates.delete')
     def handle_delete_template(data=None):
         """Delete a template by id (socket)."""
         if not data or not isinstance(data, dict):
